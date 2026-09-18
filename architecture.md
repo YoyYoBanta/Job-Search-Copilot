@@ -166,3 +166,38 @@ Stores filtered job postings imported from ATS feeds or manually pasted.
 +-----------------------------------------------------------------------------------+
 ```
 
+---
+
+## 4. AI Fit Scoring, Seniority Matcher & Anti-Fabrication Architecture (Phase 3)
+
+```
++-----------------------------------------------------------------------------------+
+| Client UI (`JobsList.tsx`)                                                        |
+| - Sequential queue controller calls `/api/score/job` one job at a time            |
+| - Dynamic backoff on HTTP 429 using `retryAfterSeconds` response from server      |
+| - Live queue progress bar & stop/resume controls                                  |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+| Single-Job Scoring Endpoint (`/api/score/job`)                                    |
+| 1. Authenticate user & load candidate context from `profiles`:                   |
+|    - `total_years_experience`, `pm_years_experience`, `target_roles`, `resume_text` |
+| 2. Build strict anti-hallucination prompt (`src/lib/matcher/prompts.ts`)          |
+| 3. Query Groq API with `llama-3.3-70b-versatile` (fallback: `llama-3.1-8b-instant`) |
+| 4. Extract & validate JSON via Zod schema (`src/lib/groq/schema.ts`)              |
+| 5. Run Anti-Fabrication Checker (`src/lib/matcher/bulletChecker.ts`)              |
+|    - Drops any recommended bullet not substantially present in master resume      |
+| 6. Persist results in Supabase: `fit_score`, `match_analysis`, `seniority_match`,  |
+|    `scored_model`, `score_status = 'scored'`, `scored_at`                         |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+| Feedback Loop (`public.feedback`)                                                 |
+| - Thumbs up / down sanity rating toggle stored per user per job                   |
+| - Scoped with Row Level Security (RLS) to `auth.uid()`                            |
++-----------------------------------------------------------------------------------+
+```
+
+

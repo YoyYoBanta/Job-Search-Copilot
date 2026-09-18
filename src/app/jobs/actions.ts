@@ -131,8 +131,93 @@ export async function restoreJobAction(formData: FormData) {
 }
 
 /**
+ * Resets a job's score status back to 'pending' to trigger re-scoring.
+ */
+export async function resetJobScoreAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('jobs')
+      .update({
+        score_status: 'pending',
+        fit_score: null,
+        match_analysis: null,
+        seniority_match: null,
+        scored_model: null,
+        scored_at: null,
+      })
+      .eq('id', jobId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/jobs');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to reset score' };
+  }
+}
+
+/**
+ * Records or toggles thumbs up / down feedback on a scored job.
+ */
+export async function submitFeedbackAction(
+  jobId: string,
+  rating: 'up' | 'down'
+): Promise<{ success: boolean; error?: string; rating?: 'up' | 'down' | null }> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Check existing feedback
+    const { data: existing } = await supabase
+      .from('feedback')
+      .select('id, rating')
+      .eq('user_id', user.id)
+      .eq('job_id', jobId)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.rating === rating) {
+        // Toggle off if clicked same rating
+        await supabase
+          .from('feedback')
+          .delete()
+          .eq('id', existing.id)
+          .eq('user_id', user.id);
+        revalidatePath('/jobs');
+        return { success: true, rating: null };
+      } else {
+        // Switch rating
+        await supabase
+          .from('feedback')
+          .update({ rating })
+          .eq('id', existing.id)
+          .eq('user_id', user.id);
+        revalidatePath('/jobs');
+        return { success: true, rating };
+      }
+    } else {
+      // Insert new rating
+      await supabase.from('feedback').insert({
+        user_id: user.id,
+        job_id: jobId,
+        rating,
+      });
+      revalidatePath('/jobs');
+      return { success: true, rating };
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to submit feedback' };
+  }
+}
+
+/**
  * Re-runs HTML sanitization on all existing jobs for the current user.
- * Fixes previously stored raw/entity-encoded descriptions.
  */
 export async function recleanJobDescriptionsAction(): Promise<{
   success: boolean;

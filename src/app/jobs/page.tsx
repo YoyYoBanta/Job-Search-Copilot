@@ -14,9 +14,25 @@ export default async function JobsPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
+  const { data: feedbacks } = await supabase
+    .from('feedback')
+    .select('job_id, rating')
+    .eq('user_id', user.id);
+
+  const feedbackMap: Record<string, 'up' | 'down'> = {};
+  feedbacks?.forEach((f) => {
+    if (f.job_id && (f.rating === 'up' || f.rating === 'down')) {
+      feedbackMap[f.job_id] = f.rating;
+    }
+  });
+
   return (
     <div style={{ maxWidth: '1000px', margin: '1rem auto 3rem' }}>
-      <JobsList initialJobs={(jobs as JobRecord[]) || []} />
+      <JobsList
+        initialJobs={(jobs as JobRecord[]) || []}
+        initialFeedbacks={feedbackMap}
+      />
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 2 Verified — Ready for Phase 3
+**Current Status:** Phase 3 Code Complete — Ready for Migration 03 & Verification
 
 ---
 
@@ -117,13 +117,17 @@
 
 ---
 
-## Phase 3 — AI Matcher: Single-Job Scoring Endpoint, Client-Driven Queue, 429 Backoff, JSON Schema Validation & Retry, Thumbs Up/Down
+## Phase 3 — AI Matcher: Seniority Context, Anti-Fabrication Bullet Verification, Dynamic Groq Pacing, Single-Job Endpoint, Client Queue & Feedback
 
-- **Goal**: Score candidate-job fit using Groq LLM with a client-driven queue calling a single-job server endpoint (avoiding Vercel serverless execution limits), with per-job 429 backoff, strict JSON validation, and feedback thumbs.
+- **Goal**: Score candidate-job fit using Groq LLM with a client-driven queue calling a single-job server endpoint (avoiding Vercel serverless execution limits), with dynamic header-based rate-limit pacing, Groq 70B/8B model fallback, verbatim resume bullet validation, and user feedback ratings.
+- **Status**: [ ] Code Complete — Ready for Migration 03 & Verification
 - **Tasks**:
-  - [ ] Create `supabase/migrations/03_feedback.sql` for scoring feedback ratings with RLS scoped to `auth.uid()`.
-  - [ ] Confirm exact Groq model ID from Groq documentation (e.g., `openai/gpt-oss-120b` or active Groq model) and define constant in `src/lib/groq.ts`.
-  - [ ] Define strict Zod validation schema matching:
+  - [x] Create `supabase/migrations/03_scoring.sql` defining:
+    - `profiles`: `total_years_experience` (numeric), `pm_years_experience` (numeric), `target_roles` (text[])
+    - `jobs`: `scored_model` (text)
+    - `feedback`: table with `id`, `user_id`, `job_id`, `rating` ('up' | 'down'), `notes`, timestamps, and RLS scoped to `auth.uid()`.
+  - [x] Configure Groq primary model `llama-3.3-70b-versatile` with automatic fallback to `llama-3.1-8b-instant` on daily token limits.
+  - [x] Define strict Zod validation schema matching:
     ```typescript
     {
       fit_score: number, // 0-100
@@ -133,35 +137,47 @@
       seniority_match: "under" | "fit" | "over"
     }
     ```
-  - [ ] Implement system prompt strictly enforcing truthfulness (no hallucinations / only facts from user resume).
-  - [ ] Implement Single-Job Server Action / API Route (`/api/score/job`):
-    - Receives a single `jobId`.
-    - Evaluates fit against the stored resume.
-    - Handles Groq HTTP 429 rate limit with per-job exponential backoff.
-    - Retries once on malformed JSON; sets `score_status = 'scoring failed'` if second attempt fails.
-    - Saves match result (`fit_score`, `match_analysis`, `score_status`, `scored_at`) to Supabase.
-  - [ ] Build Client-Driven Queue Controller in UI:
-    - Fetches list of jobs where `score_status = 'pending'`.
-    - Iterates sequentially on the client side: requests scoring for one job, waits the configured pacing delay, and requests the next.
-    - Displays live progress indicator (e.g., "Scoring 7 of 30").
-    - If user closes or refreshes the tab, scoring pauses cleanly and resumes from remaining `'pending'` jobs upon reopening.
-  - [ ] Add "Re-score" button on individual job cards to reset status to `'pending'` and re-trigger single-job scoring.
-  - [ ] Add Thumbs Up / Thumbs Down interactive feedback buttons on each scored job card and store rating in `feedback` table.
-- **Files Likely Touched**:
-  - `supabase/migrations/03_feedback.sql`
-  - `src/lib/groq.ts`
-  - `src/lib/matcher/schema.ts`, `src/lib/matcher/prompts.ts`
-  - `src/app/api/score/job/route.ts` or `src/app/jobs/score-actions.ts`
-  - `src/hooks/useScoreQueue.ts` or `src/components/ScoreQueueManager.tsx`
-  - `src/components/ScoreDisplay.tsx`, `src/components/FeedbackButtons.tsx`, `src/components/JobScoreCard.tsx`
+  - [x] Implement Seniority Context & Evaluation Rules in prompt:
+    - "fit": Required PM years/level within reach of candidate's PM/total experience, OR role title in `target_roles` (APM is fit, not under).
+    - "over": Role requires clearly more PM years than candidate has (e.g., "8+ years of PM" compared against `pm_years_experience`).
+    - "under": Internships or roles below APM.
+  - [x] Implement Anti-Fabrication Bullet Checker (`src/lib/matcher/bulletChecker.ts`):
+    - Drops recommended resume bullets that do not substantially appear verbatim in the candidate's resume.
+  - [x] Implement Single-Job Scoring Route (`/api/score/job`):
+    - Authenticates user session and queries via Supabase client with RLS.
+    - Handles HTTP 429 by returning `{ retryAfterSeconds }` for browser client pacing (zero serverless function blocking).
+    - Retries malformed JSON once with corrective prompt; sets `score_status = 'failed'` on persistent failure.
+    - Persists score, match analysis, seniority, and scored model.
+  - [x] Build Client-Driven Queue Controller in `src/components/JobsList.tsx`:
+    - "⚡ Score All Pending (N)" sequential queue with live progress bar.
+    - Paces requests dynamically based on `retryAfterSeconds` on 429.
+    - Allows pausing/stopping queue at any time.
+  - [x] Add Re-score action on individual job cards (`resetJobScoreAction`).
+  - [x] Add Thumbs Up / Thumbs Down feedback buttons (`FeedbackButtons.tsx`) storing ratings in `feedback` table.
+  - [x] Add Seniority filter, Score Status filter, and Sort by Fit Score controls to `JobsList`.
+  - [x] Add Vitest unit test suites:
+    - Seniority rules prompt evaluation (`src/lib/matcher/__tests__/seniority.test.ts`)
+    - Anti-fabrication verbatim bullet verification (`src/lib/matcher/__tests__/bulletChecker.test.ts`)
+    - Schema validation and JSON extractor (`src/lib/groq/__tests__/schema.test.ts`)
+- **Files Touched**:
+  - `package.json`
+  - `supabase/migrations/03_scoring.sql`
+  - `src/lib/groq/config.ts`, `src/lib/groq/schema.ts`, `src/lib/groq/client.ts`, `src/lib/groq/__tests__/schema.test.ts`
+  - `src/lib/matcher/prompts.ts`, `src/lib/matcher/bulletChecker.ts`, `src/lib/matcher/__tests__/seniority.test.ts`, `src/lib/matcher/__tests__/bulletChecker.test.ts`
+  - `src/app/api/score/job/route.ts`
+  - `src/app/jobs/actions.ts`, `src/app/jobs/page.tsx`
+  - `src/app/profile/actions.ts`, `src/app/profile/page.tsx`
+  - `src/components/ResumeEditor.tsx`, `src/components/JobsList.tsx`, `src/components/SeniorityBadge.tsx`, `src/components/FeedbackButtons.tsx`
 - **"Done When" Test Criteria**:
-  1. Triggering batch scoring executes single-job requests sequentially driven by the client UI, displaying progress (e.g. "Scoring 7 of 30").
-  2. Closing the browser tab and reopening allows resuming scoring from remaining `pending` jobs without duplicates.
-  3. Server endpoint execution completes well within Vercel timeout limits since only 1 job is processed per request.
-  4. Per-job HTTP 429 responses back off and retry automatically without crashing the client queue.
-  5. Successfully scored job displays fit score (0-100), top 3 reasons, gaps, recommended bullets, and seniority match badge.
-  6. Jobs failing validation twice display `"scoring failed"` state with an active "Re-score" button.
-  7. Clicking thumbs up / thumbs down updates the user feedback rating in the database.
+  1. [ ] Triggering batch scoring executes single-job requests sequentially driven by the client UI, displaying progress.
+  2. [ ] Closing the browser tab and reopening allows resuming scoring from remaining `pending` jobs without duplicates.
+  3. [ ] Server endpoint execution completes well within Vercel timeout limits since only 1 job is processed per request.
+  4. [ ] Per-job HTTP 429 responses back off and retry automatically without crashing the client queue.
+  5. [ ] Successfully scored job displays fit score (0-100), top 3 reasons, gaps, recommended verbatim bullets, model badge, and seniority match badge.
+  6. [ ] Seniority rules accurately identify APM as "fit", "8+ years PM" as "over", and internships as "under".
+  7. [ ] Recommended bullets only contain lines verified from candidate resume.
+  8. [ ] Clicking thumbs up / thumbs down updates user feedback rating in the database.
+
 
 ---
 

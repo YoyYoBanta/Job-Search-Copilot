@@ -1,0 +1,166 @@
+import 'server-only';
+import { PRIMARY_GROQ_MODEL, FALLBACK_GROQ_MODEL, GROQ_API_URL } from './config';
+import { extractAndParseJson, FitScoreResponse, FitScoreResponseSchema } from './schema';
+
+export interface GroqRateLimitInfo {
+  remainingTokens?: number;
+  resetTokensSeconds?: number;
+  remainingRequests?: number;
+  resetRequestsSeconds?: number;
+  retryAfterSeconds?: number;
+}
+
+export interface GroqScoreResult {
+  data: FitScoreResponse;
+  modelUsed: string;
+  rateLimitInfo: GroqRateLimitInfo;
+}
+
+function parseSeconds(val: string | null): number | undefined {
+  if (!val) return undefined;
+  // Handle formats like "7.66s", "2m30s", "500ms"
+  const trimmed = val.trim();
+  if (trimmed.endsWith('ms')) {
+    return parseFloat(trimmed.replace('ms', '')) / 1000;
+  }
+  if (trimmed.endsWith('s')) {
+    if (trimmed.includes('m')) {
+      const parts = trimmed.split('m');
+      const minutes = parseFloat(parts[0]) || 0;
+      const seconds = parseFloat(parts[1].replace('s', '')) || 0;
+      return minutes * 60 + seconds;
+    }
+    return parseFloat(trimmed.replace('s', ''));
+  }
+  const num = parseFloat(trimmed);
+  return isNaN(num) ? undefined : num;
+}
+
+function extractRateLimitInfo(headers: Headers): GroqRateLimitInfo {
+  const remainingTokensStr = headers.get('x-ratelimit-remaining-tokens');
+  const resetTokensStr = headers.get('x-ratelimit-reset-tokens');
+  const remainingRequestsStr = headers.get('x-ratelimit-remaining-requests');
+  const resetRequestsStr = headers.get('x-ratelimit-reset-requests');
+  const retryAfterStr = headers.get('retry-after');
+
+  return {
+    remainingTokens: remainingTokensStr ? parseInt(remainingTokensStr, 10) : undefined,
+    resetTokensSeconds: parseSeconds(resetTokensStr),
+    remainingRequests: remainingRequestsStr ? parseInt(remainingRequestsStr, 10) : undefined,
+    resetRequestsSeconds: parseSeconds(resetRequestsStr),
+    retryAfterSeconds: parseSeconds(retryAfterStr),
+  };
+}
+
+async function callGroqChat(
+  model: string,
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  apiKey: string
+): Promise<{ content: string; rateLimits: GroqRateLimitInfo }> {
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  const rateLimits = extractRateLimitInfo(response.headers);
+
+  if (response.status === 429) {
+    const errorBody = await response.text();
+    const retryDelay = rateLimits.retryAfterSeconds || rateLimits.resetTokensSeconds || 5;
+    const error: any = new Error(`Groq rate limit exceeded (HTTP 429): ${errorBody}`);
+    error.status = 429;
+    error.retryAfterSeconds = Math.ceil(retryDelay);
+    error.isDailyCap = errorBody.toLowerCase().includes('daily') || errorBody.toLowerCase().includes('tpd');
+    throw error;
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Groq API error (HTTP ${response.status}): ${errorBody}`);
+  }
+
+  const json = await response.json();
+  const content = json.choices?.[0]?.message?.content || '';
+  return { content, rateLimits };
+}
+
+export async function requestGroqFitScore(
+  systemMessage: string,
+  userMessage: string
+): Promise<GroqScoreResult> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing GROQ_API_KEY environment variable.');
+  }
+
+  let activeModel = PRIMARY_GROQ_MODEL;
+
+  // Attempt 1 with primary model
+  let rawContent: string;
+  let rateLimits: GroqRateLimitInfo;
+
+  try {
+    const res = await callGroqChat(
+      activeModel,
+      [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMessage },
+      ],
+      apiKey
+    );
+    rawContent = res.content;
+    rateLimits = res.rateLimits;
+  } catch (err: any) {
+    // If daily token cap was hit on primary 70b model, automatically fall back to 8b instant model
+    if (err.status === 429 && err.isDailyCap) {
+      activeModel = FALLBACK_GROQ_MODEL;
+      const fallbackRes = await callGroqChat(
+        activeModel,
+        [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
+        ],
+        apiKey
+      );
+      rawContent = fallbackRes.content;
+      rateLimits = fallbackRes.rateLimits;
+    } else {
+      throw err;
+    }
+  }
+
+  // Attempt to parse and validate JSON
+  try {
+    const parsed = extractAndParseJson(rawContent);
+    const validated = FitScoreResponseSchema.parse(parsed);
+    return { data: validated, modelUsed: activeModel, rateLimitInfo: rateLimits };
+  } catch (firstParseError) {
+    // Retry once with a corrective JSON prompt
+    const correctiveRes = await callGroqChat(
+      activeModel,
+      [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: rawContent },
+        {
+          role: 'user',
+          content: 'Your previous response was not valid JSON matching the required schema. Return ONLY valid JSON with keys: fit_score (number 0-100), top_reasons (string[]), gaps (string[]), recommended_resume_bullets_to_lead_with (string[]), seniority_match ("under"|"fit"|"over").',
+        },
+      ],
+      apiKey
+    );
+
+    const secondParsed = extractAndParseJson(correctiveRes.content);
+    const secondValidated = FitScoreResponseSchema.parse(secondParsed);
+    return { data: secondValidated, modelUsed: activeModel, rateLimitInfo: correctiveRes.rateLimits };
+  }
+}
