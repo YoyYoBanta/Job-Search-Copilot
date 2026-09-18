@@ -111,6 +111,18 @@ describe('Tailor Validator & Schema Tests', () => {
       it('flags "product-focused builder"', () => {
         expect(findCliches('I am a product-focused builder with fintech experience.')).toContain('product-focused builder');
       });
+
+      it('flags "illustrating"', () => {
+        expect(findCliches('Launched a self-serve portal, illustrating strong UX execution.')).toContain('illustrating');
+      });
+
+      it('flags "providing the"', () => {
+        expect(findCliches('Owned merchant integrations, providing the foundation for scale.')).toContain('providing the');
+      });
+
+      it('flags "the ability to"', () => {
+        expect(findCliches('Developed the ability to ship features under tight deadlines.')).toContain('the ability to');
+      });
     });
   });
 

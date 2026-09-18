@@ -7,7 +7,7 @@ import {
 } from '../prompts';
 
 describe('Tailor Prompts Construction Tests', () => {
-  it('builds system prompt containing anti-fabrication, length bounds, gap ban, and new cover/referral rules', () => {
+  it('builds system prompt containing anti-fabrication, length bounds, gap ban, style reference example, and new rules', () => {
     const sysPrompt = buildTailorSystemPrompt();
     expect(sysPrompt).toContain('STRICT DATA TRUTHFULNESS & GROUNDING');
     expect(sysPrompt).toContain('130–170 words');
@@ -16,14 +16,23 @@ describe('Tailor Prompts Construction Tests', () => {
     expect(sysPrompt).toContain('"cover_note"');
     expect(sysPrompt).toContain('"referral_message"');
 
-    // Cover note rules
+    // Style reference example
+    expect(sysPrompt).toContain('STYLE REFERENCE EXAMPLE (match this style, do not copy its content)');
+    expect(sysPrompt).toContain("Wadhwani AI's APM role asks for someone who writes the spec");
+    expect(sysPrompt).toContain("That's the loop I've been running at Amber.");
+
+    // Truthfulness & Literal Claiming
+    expect(sysPrompt).toContain('Only claim what the resume literally says.');
+    expect(sysPrompt).toContain('Never explain what a fact proves.');
+    expect(sysPrompt).toContain('Always use the full company name, never an acronym.');
+
+    // Cover note & Referral rules
     expect(sysPrompt).toContain('Hook: Open by naming 1-2 specific requirements');
     expect(sysPrompt).toContain('Show, Don\'t Label');
     expect(sysPrompt).toContain('Shared Domain / Sector');
     expect(sysPrompt).toContain('Plain Closing');
-
-    // Referral rules
     expect(sysPrompt).toContain('10-minute chat first');
+    expect(sysPrompt).toContain('Must Name Company');
 
     // Check presence of banned phrases in system prompt / FORBIDDEN_CLICHES
     expect(FORBIDDEN_CLICHES).toContain('showing');
@@ -35,6 +44,9 @@ describe('Tailor Prompts Construction Tests', () => {
     expect(FORBIDDEN_CLICHES).toContain('measurable impact');
     expect(FORBIDDEN_CLICHES).toContain('thank you for considering');
     expect(FORBIDDEN_CLICHES).toContain('product-focused builder');
+    expect(FORBIDDEN_CLICHES).toContain('illustrating');
+    expect(FORBIDDEN_CLICHES).toContain('providing the');
+    expect(FORBIDDEN_CLICHES).toContain('the ability to');
   });
 
   it('builds user prompt with recipient name, relationship context, job URL, and title', () => {
