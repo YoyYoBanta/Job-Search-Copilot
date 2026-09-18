@@ -11,7 +11,8 @@ export const FitScoreResponseSchema = z.object({
 export type FitScoreResponse = z.infer<typeof FitScoreResponseSchema>;
 
 /**
- * Extracts JSON content from raw LLM output, handling markdown fences and trailing commas.
+ * Extracts JSON content from raw LLM output, handling reasoning tags (<think>...</think>),
+ * markdown fences, and trailing commas.
  */
 export function extractAndParseJson(text: string): unknown {
   if (!text || typeof text !== 'string') {
@@ -20,20 +21,23 @@ export function extractAndParseJson(text: string): unknown {
 
   let cleaned = text.trim();
 
-  // 1. Remove markdown code fences if present (```json ... ``` or ``` ...)
+  // 1. Strip reasoning blocks (<think>...</think>) if emitted by reasoning models
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // 2. Remove markdown code fences if present (```json ... ``` or ``` ...)
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenceMatch && fenceMatch[1]) {
     cleaned = fenceMatch[1].trim();
   }
 
-  // 2. Find outermost JSON object
+  // 3. Find outermost JSON object
   const startIdx = cleaned.indexOf('{');
   const endIdx = cleaned.lastIndexOf('}');
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     cleaned = cleaned.substring(startIdx, endIdx + 1);
   }
 
-  // 3. Remove trailing commas before closing braces/brackets
+  // 4. Remove trailing commas before closing braces/brackets
   cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
 
   try {

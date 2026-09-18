@@ -126,7 +126,7 @@
     - `profiles`: `total_years_experience` (numeric), `pm_years_experience` (numeric), `target_roles` (text[])
     - `jobs`: `scored_model` (text)
     - `feedback`: table with `id`, `user_id`, `job_id`, `rating` ('up' | 'down'), `notes`, timestamps, and RLS scoped to `auth.uid()`.
-  - [x] Configure Groq primary model `llama-3.3-70b-versatile` with automatic fallback to `llama-3.1-8b-instant` on daily token limits.
+  - [x] Configure Groq models via `GROQ_MODEL_PRIMARY` (default `openai/gpt-oss-120b`) with automatic fallback to `GROQ_MODEL_FALLBACK` (default `openai/gpt-oss-20b`) on HTTP 404 or daily token caps, using `reasoning_effort: "low"`.
   - [x] Define strict Zod validation schema matching:
     ```typescript
     {

@@ -1,5 +1,5 @@
 import 'server-only';
-import { PRIMARY_GROQ_MODEL, FALLBACK_GROQ_MODEL, GROQ_API_URL } from './config';
+import { getPrimaryGroqModel, getFallbackGroqModel, GROQ_API_URL } from './config';
 import { extractAndParseJson, FitScoreResponse, FitScoreResponseSchema } from './schema';
 
 export interface GroqRateLimitInfo {
@@ -66,7 +66,7 @@ async function callGroqChat(
     body: JSON.stringify({
       model,
       messages,
-      temperature: 0.1,
+      reasoning_effort: 'low',
       response_format: { type: 'json_object' },
     }),
   });
@@ -81,6 +81,15 @@ async function callGroqChat(
     error.status = 429;
     error.retryAfterSeconds = Math.ceil(retryDelay);
     error.isDailyCap = errorBody.toLowerCase().includes('daily') || errorBody.toLowerCase().includes('tpd');
+    throw error;
+  }
+
+  if (response.status === 404) {
+    const errorBody = await response.text();
+    console.error(`[Groq HTTP 404 Model Not Found] Model: ${model}, Status: 404, Body:`, errorBody);
+    const error: any = new Error(`Groq model not found (HTTP 404 for model ${model}): ${errorBody}`);
+    error.status = 404;
+    error.isModelNotFound = true;
     throw error;
   }
 
@@ -105,9 +114,10 @@ export async function requestGroqFitScore(
     throw new Error('Missing GROQ_API_KEY environment variable. Please configure GROQ_API_KEY in Vercel or .env.local.');
   }
 
-  let activeModel = PRIMARY_GROQ_MODEL;
+  const primaryModel = getPrimaryGroqModel();
+  const fallbackModel = getFallbackGroqModel();
 
-  // Attempt 1 with primary model
+  let activeModel = primaryModel;
   let rawContent: string;
   let rateLimits: GroqRateLimitInfo;
 
@@ -123,20 +133,29 @@ export async function requestGroqFitScore(
     rawContent = res.content;
     rateLimits = res.rateLimits;
   } catch (err: any) {
-    // If daily token cap was hit on primary 70b model, automatically fall back to 8b instant model
-    if (err.status === 429 && err.isDailyCap) {
-      console.warn(`[Groq Daily Cap Hit] Falling back from ${PRIMARY_GROQ_MODEL} to ${FALLBACK_GROQ_MODEL}`);
-      activeModel = FALLBACK_GROQ_MODEL;
-      const fallbackRes = await callGroqChat(
-        activeModel,
-        [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage },
-        ],
-        apiKey
-      );
-      rawContent = fallbackRes.content;
-      rateLimits = fallbackRes.rateLimits;
+    // If primary model does not exist (404) or daily token cap was hit (429), fall back to fallback model
+    const shouldFallback =
+      (err.status === 404 || err.isModelNotFound) ||
+      (err.status === 429 && err.isDailyCap);
+
+    if (shouldFallback && fallbackModel !== primaryModel) {
+      console.warn(`[Groq Model Fallback] Primary model ${primaryModel} failed (${err.message}). Trying fallback model ${fallbackModel}...`);
+      activeModel = fallbackModel;
+      try {
+        const fallbackRes = await callGroqChat(
+          activeModel,
+          [
+            { role: 'system', content: systemMessage },
+            { role: 'user', content: userMessage },
+          ],
+          apiKey
+        );
+        rawContent = fallbackRes.content;
+        rateLimits = fallbackRes.rateLimits;
+      } catch (fallbackErr: any) {
+        console.error(`[Groq Fallback Error] Fallback model ${fallbackModel} also failed:`, fallbackErr.message);
+        throw new Error(`Primary model (${primaryModel}) failed with ${err.message}; Fallback model (${fallbackModel}) also failed with: ${fallbackErr.message}`);
+      }
     } else {
       throw err;
     }

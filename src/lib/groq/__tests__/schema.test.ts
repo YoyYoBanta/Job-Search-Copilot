@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractAndParseJson, FitScoreResponseSchema } from '../schema';
+import { formatShortModelName, getPrimaryGroqModel, getFallbackGroqModel } from '../config';
 
 describe('Groq Fit Scoring Schema & JSON Parser', () => {
   it('parses valid raw JSON strings', () => {
@@ -48,6 +49,34 @@ Hope this helps!
     expect(validated.fit_score).toBe(92);
     expect(validated.seniority_match).toBe('fit');
     expect(validated.top_reasons).toHaveLength(2);
+  });
+
+  it('extracts and parses JSON from reasoning model outputs containing <think> tags', () => {
+    const reasoningOutput = `
+<think>
+Let's evaluate the candidate:
+- Experience: 4 years PM
+- Required: 8+ years
+Seniority is over. Fit score ~40.
+Let's format valid JSON output now.
+</think>
+\`\`\`json
+{
+  "fit_score": 40,
+  "top_reasons": ["Relevant product management background"],
+  "gaps": ["Requires 8+ years PM experience; candidate has 4 years"],
+  "recommended_resume_bullets_to_lead_with": [],
+  "seniority_match": "over"
+}
+\`\`\`
+`;
+
+    const parsed = extractAndParseJson(reasoningOutput);
+    const validated = FitScoreResponseSchema.parse(parsed);
+
+    expect(validated.fit_score).toBe(40);
+    expect(validated.seniority_match).toBe('over');
+    expect(validated.gaps).toHaveLength(1);
   });
 
   it('handles trailing commas in JSON gracefully', () => {
@@ -99,5 +128,19 @@ Hope this helps!
       fit_score: -5,
     };
     expect(FitScoreResponseSchema.safeParse(invalidLow).success).toBe(false);
+  });
+
+  it('correctly extracts short model name for UI badges', () => {
+    expect(formatShortModelName('openai/gpt-oss-120b')).toBe('gpt-oss-120b');
+    expect(formatShortModelName('openai/gpt-oss-20b')).toBe('gpt-oss-20b');
+    expect(formatShortModelName('custom-model')).toBe('custom-model');
+    expect(formatShortModelName(null)).toBe('');
+    expect(formatShortModelName(undefined)).toBe('');
+  });
+
+  it('resolves default primary and fallback Groq models from config helpers', () => {
+    expect(getPrimaryGroqModel()).toBeDefined();
+    expect(getFallbackGroqModel()).toBeDefined();
+    expect(getPrimaryGroqModel()).toContain('gpt-oss');
   });
 });

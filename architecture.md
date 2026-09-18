@@ -184,12 +184,14 @@ Stores filtered job postings imported from ATS feeds or manually pasted.
 | 1. Authenticate user & load candidate context from `profiles`:                   |
 |    - `total_years_experience`, `pm_years_experience`, `target_roles`, `resume_text` |
 | 2. Build strict anti-hallucination prompt (`src/lib/matcher/prompts.ts`)          |
-| 3. Query Groq API with `llama-3.3-70b-versatile` (fallback: `llama-3.1-8b-instant`) |
+| 3. Query Groq API with `openai/gpt-oss-120b` (fallback: `openai/gpt-oss-20b`,      |
+|    configurable via `GROQ_MODEL_PRIMARY` and `GROQ_MODEL_FALLBACK` env vars,      |
+|    with `reasoning_effort: "low"` and reasoning tag stripping)                     |
 | 4. Extract & validate JSON via Zod schema (`src/lib/groq/schema.ts`)              |
 | 5. Run Anti-Fabrication Checker (`src/lib/matcher/bulletChecker.ts`)              |
 |    - Drops any recommended bullet not substantially present in master resume      |
 | 6. Persist results in Supabase: `fit_score`, `match_analysis`, `seniority_match`,  |
-|    `scored_model`, `score_status = 'scored'`, `scored_at`                         |
+|    `scored_model`, `score_status = 'scored'`, `score_error = null`, `scored_at`   |
 +-----------------------------------------------------------------------------------+
                                          |
                                          v

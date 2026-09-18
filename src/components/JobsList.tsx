@@ -7,6 +7,7 @@ import { EligibilityBadge } from '@/components/EligibilityBadge';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
 import { SeniorityBadge } from '@/components/SeniorityBadge';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
+import { formatShortModelName } from '@/lib/groq/config';
 import Link from 'next/link';
 
 export interface MatchAnalysis {
@@ -520,7 +521,7 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                           }}
                           title={`Evaluated with Groq model: ${job.scored_model}`}
                         >
-                          {job.scored_model.includes('70b') ? '70B' : '8B'}
+                          {formatShortModelName(job.scored_model)}
                         </span>
                       )}
                     </div>
@@ -770,7 +771,7 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
-                      <span>Model: <code>{job.scored_model || 'llama-3.3-70b-versatile'}</code></span>
+                      <span>Model: <code>{job.scored_model ? formatShortModelName(job.scored_model) : 'AI Model'}</code></span>
                       {job.scored_at && (
                         <span>
                           Scored <LocalTime isoDate={job.scored_at} format="datetime" />
