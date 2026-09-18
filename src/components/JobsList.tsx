@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef } from 'react';
+import { useState, useTransition, useRef, useEffect } from 'react';
 import { dismissJobAction, restoreJobAction, recleanJobDescriptionsAction, resetJobScoreAction } from '@/app/jobs/actions';
 import { LocalTime } from '@/components/LocalTime';
 import { EligibilityBadge } from '@/components/EligibilityBadge';
@@ -60,9 +60,19 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [viewingDescriptionId, setViewingDescriptionId] = useState<string | null>(null);
 
-  // Maintenance & Actions
+  // Maintenance & Action Feedback
   const [isRecleaning, startRecleanTransition] = useTransition();
   const [recleanMessage, setRecleanMessage] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    text: string;
+    isError?: boolean;
+    isWarning?: boolean;
+  } | null>(null);
+
+  // Sync state when initialJobs change from server revalidation
+  useEffect(() => {
+    setJobs(initialJobs);
+  }, [initialJobs]);
 
   // Queue state
   const [isScoringQueueRunning, setIsScoringQueueRunning] = useState(false);
@@ -87,6 +97,78 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
       setRecleanMessage(res.message);
       setTimeout(() => setRecleanMessage(null), 5000);
     });
+  };
+
+  /**
+   * Restore a dismissed job with immediate optimistic UI and feedback message
+   */
+  const handleRestore = async (jobId: string) => {
+    // Optimistic update
+    setJobs((prev) =>
+      prev.map((j) => (j.id === jobId ? { ...j, dismissed: false } : j))
+    );
+
+    try {
+      const res = await restoreJobAction(jobId);
+      if (res.success) {
+        if (res.filterWarning) {
+          setActionMessage({
+            text: `${res.message || 'Job restored.'} ${res.filterWarning}`,
+            isWarning: true,
+          });
+        } else {
+          setActionMessage({
+            text: res.message || 'Job restored successfully!',
+            isError: false,
+          });
+        }
+        setTimeout(() => setActionMessage(null), 6000);
+      } else {
+        // Revert optimistic update
+        setJobs((prev) =>
+          prev.map((j) => (j.id === jobId ? { ...j, dismissed: true } : j))
+        );
+        setActionMessage({ text: res.error || 'Failed to restore job', isError: true });
+        setTimeout(() => setActionMessage(null), 6000);
+      }
+    } catch (err: any) {
+      setJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? { ...j, dismissed: true } : j))
+      );
+      setActionMessage({ text: err?.message || 'Unexpected restore error', isError: true });
+      setTimeout(() => setActionMessage(null), 6000);
+    }
+  };
+
+  /**
+   * Dismiss a job with immediate optimistic UI and feedback message
+   */
+  const handleDismiss = async (jobId: string) => {
+    // Optimistic update
+    setJobs((prev) =>
+      prev.map((j) => (j.id === jobId ? { ...j, dismissed: true } : j))
+    );
+
+    try {
+      const res = await dismissJobAction(jobId);
+      if (res.success) {
+        setActionMessage({ text: res.message || 'Job dismissed.', isError: false });
+        setTimeout(() => setActionMessage(null), 4000);
+      } else {
+        // Revert optimistic update
+        setJobs((prev) =>
+          prev.map((j) => (j.id === jobId ? { ...j, dismissed: false } : j))
+        );
+        setActionMessage({ text: res.error || 'Failed to dismiss job', isError: true });
+        setTimeout(() => setActionMessage(null), 6000);
+      }
+    } catch (err: any) {
+      setJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? { ...j, dismissed: false } : j))
+      );
+      setActionMessage({ text: err?.message || 'Unexpected dismiss error', isError: true });
+      setTimeout(() => setActionMessage(null), 6000);
+    }
   };
 
   /**
@@ -334,6 +416,22 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
           </Link>
         </div>
       </div>
+
+      {/* User Action Feedback Banner (e.g. Filter Warning or Error on Restore) */}
+      {actionMessage && (
+        <div
+          className={`alert ${
+            actionMessage.isError
+              ? 'alert-error'
+              : actionMessage.isWarning
+              ? 'alert-warning'
+              : 'alert-success'
+          }`}
+          style={{ padding: '0.75rem 1rem', fontSize: '0.875rem' }}
+        >
+          <span>{actionMessage.text}</span>
+        </div>
+      )}
 
       {/* Scoring Queue Live Progress Banner */}
       {scoringProgress && (
@@ -619,29 +717,25 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
 
                     {/* Dismiss / Restore */}
                     {job.dismissed ? (
-                      <form action={restoreJobAction}>
-                        <input type="hidden" name="job_id" value={job.id} />
-                        <button
-                          type="submit"
-                          className="btn btn-secondary"
-                          style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
-                          title="Restore Job to Active List"
-                        >
-                          Restore
-                        </button>
-                      </form>
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(job.id)}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                        title="Restore Job to Active List"
+                      >
+                        Restore
+                      </button>
                     ) : (
-                      <form action={dismissJobAction}>
-                        <input type="hidden" name="job_id" value={job.id} />
-                        <button
-                          type="submit"
-                          className="btn btn-danger"
-                          style={{ padding: '0.375rem 0.625rem', fontSize: '0.75rem' }}
-                          title="Dismiss Job"
-                        >
-                          ✕
-                        </button>
-                      </form>
+                      <button
+                        type="button"
+                        onClick={() => handleDismiss(job.id)}
+                        className="btn btn-danger"
+                        style={{ padding: '0.375rem 0.625rem', fontSize: '0.75rem' }}
+                        title="Dismiss Job"
+                      >
+                        ✕
+                      </button>
                     )}
                   </div>
                 </div>

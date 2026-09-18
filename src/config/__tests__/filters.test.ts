@@ -178,5 +178,11 @@ describe('Job Filters Specification Tests', () => {
       expect(res.passed).toBe(true);
       expect(res.needsEligibilityCheck).toBe(false);
     });
+
+    it('fails Product Manager, Mobile in San Francisco / Seattle (triggers filter warning on restore)', () => {
+      const res = evaluateJobFilter('Product Manager, Mobile', 'San Francisco, CA; Seattle, WA');
+      expect(res.passed).toBe(false);
+      expect(res.reason).toBeDefined();
+    });
   });
 });

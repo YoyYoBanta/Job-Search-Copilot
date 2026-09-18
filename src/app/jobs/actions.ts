@@ -90,43 +90,106 @@ export async function pasteJobAction(
   }
 }
 
-export async function dismissJobAction(formData: FormData) {
+export async function dismissJobAction(jobIdOrFormData: string | FormData): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+}> {
   try {
     const user = await requireAuth();
-    const jobId = formData.get('job_id') as string;
+    let jobId: string;
+    if (typeof jobIdOrFormData === 'string') {
+      jobId = jobIdOrFormData;
+    } else {
+      jobId = jobIdOrFormData.get('job_id') as string;
+    }
 
-    if (!jobId) return;
+    if (!jobId) {
+      return { success: false, error: 'Missing job ID to dismiss.' };
+    }
 
     const supabase = await createClient();
-    await supabase
+    const { error } = await supabase
       .from('jobs')
       .update({ dismissed: true })
       .eq('id', jobId)
       .eq('user_id', user.id);
 
+    if (error) {
+      return { success: false, error: `Failed to dismiss job: ${error.message}` };
+    }
+
     revalidatePath('/jobs');
-  } catch (err) {
-    console.error('Error dismissing job:', err);
+    revalidatePath('/');
+
+    return { success: true, message: 'Job dismissed.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Unexpected error while dismissing job.' };
   }
 }
 
-export async function restoreJobAction(formData: FormData) {
+export async function restoreJobAction(jobIdOrFormData: string | FormData): Promise<{
+  success: boolean;
+  message?: string;
+  filterWarning?: string;
+  error?: string;
+}> {
   try {
     const user = await requireAuth();
-    const jobId = formData.get('job_id') as string;
+    let jobId: string;
+    if (typeof jobIdOrFormData === 'string') {
+      jobId = jobIdOrFormData;
+    } else {
+      jobId = jobIdOrFormData.get('job_id') as string;
+    }
 
-    if (!jobId) return;
+    if (!jobId) {
+      return { success: false, error: 'Missing job ID to restore.' };
+    }
 
     const supabase = await createClient();
-    await supabase
+
+    // 1. Fetch job to inspect title & location for filter awareness
+    const { data: job, error: fetchErr } = await supabase
+      .from('jobs')
+      .select('id, title, location')
+      .eq('id', jobId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (fetchErr) {
+      return { success: false, error: `Failed to fetch job details: ${fetchErr.message}` };
+    }
+
+    // 2. Perform restore update (Always restore regardless of filter match)
+    const { error: updateErr } = await supabase
       .from('jobs')
       .update({ dismissed: false })
       .eq('id', jobId)
       .eq('user_id', user.id);
 
+    if (updateErr) {
+      return { success: false, error: `Database update error: ${updateErr.message}` };
+    }
+
     revalidatePath('/jobs');
-  } catch (err) {
-    console.error('Error restoring job:', err);
+    revalidatePath('/');
+
+    let filterWarning: string | undefined;
+    if (job) {
+      const filterResult = evaluateJobFilter(job.title, job.location);
+      if (!filterResult.passed) {
+        filterWarning = `Location "${job.location}" is outside target India/Remote criteria, but was restored as requested.`;
+      }
+    }
+
+    return {
+      success: true,
+      message: job?.title ? `"${job.title}" restored successfully.` : 'Job restored successfully.',
+      filterWarning,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Unexpected error while restoring job.' };
   }
 }
 
