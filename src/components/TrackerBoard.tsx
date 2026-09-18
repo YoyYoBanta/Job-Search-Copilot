@@ -7,7 +7,7 @@ import {
   snoozeFollowUpAction,
   untrackApplicationAction,
 } from '@/app/tracker/actions';
-import { ApplicationStage, getTodayIST, isFollowUpDue, StageHistoryEntry } from '@/lib/tracker/dates';
+import { ApplicationStage, getTodayIST, getDaysAheadIST, isFollowUpDue, StageHistoryEntry } from '@/lib/tracker/dates';
 import { calculateTrackerMetrics } from '@/lib/tracker/metrics';
 import { JobRecord } from '@/components/JobsList';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
@@ -95,6 +95,10 @@ export function TrackerBoard({ initialApplications }: TrackerBoardProps) {
     }
 
     const appliedDateDefault = newStage === 'applied' && !app.applied_date ? todayIST : app.applied_date;
+    const followUpDefault =
+      newStage === 'applied' && !app.next_follow_up_date
+        ? getDaysAheadIST(7)
+        : app.next_follow_up_date;
 
     // Optimistic update
     setApplications((prev) =>
@@ -104,6 +108,7 @@ export function TrackerBoard({ initialApplications }: TrackerBoardProps) {
               ...item,
               stage: newStage,
               applied_date: appliedDateDefault,
+              next_follow_up_date: followUpDefault,
               stage_history: [...item.stage_history, { stage: newStage, timestamp: new Date().toISOString() }],
               updated_at: new Date().toISOString(),
             }
@@ -128,6 +133,7 @@ export function TrackerBoard({ initialApplications }: TrackerBoardProps) {
     if (!referralPromptApp) return;
     const app = referralPromptApp;
     const referrer = promptReferrerName.trim() || undefined;
+    const followUpDefault = !app.next_follow_up_date ? getDaysAheadIST(7) : app.next_follow_up_date;
 
     setReferralPromptApp(null);
 
@@ -140,6 +146,7 @@ export function TrackerBoard({ initialApplications }: TrackerBoardProps) {
               stage: 'referral_asked',
               referrer_name: referrer || null,
               channel: 'referral',
+              next_follow_up_date: followUpDefault,
               stage_history: [...item.stage_history, { stage: 'referral_asked', timestamp: new Date().toISOString() }],
               updated_at: new Date().toISOString(),
             }

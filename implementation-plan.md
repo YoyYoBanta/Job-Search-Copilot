@@ -1,6 +1,6 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 3 Verified & Closed — Phase 4 Planning
+**Current Status:** Phase 5 Verified & Closed — Ready for Phase 6 / Release
 
 ---
 
@@ -215,36 +215,41 @@
 
 ## Phase 5 — Tracker Board with Status History, Notes, and Pipeline Metrics
 
-- **Goal**: Provide an interactive status-dropdown pipeline tracker across all application stages, logging timestamped status transitions, notes, and calculating pipeline performance metrics (with drag-and-drop as optional polish).
+- **Goal**: Provide an interactive status-dropdown pipeline tracker across all application stages, logging timestamped status transitions, notes, follow-up nudges in Asia/Kolkata (IST), and calculating historical conversion metrics.
+- **Status**: [x] Verified on Vercel Preview (All criteria passed)
 - **Tasks**:
-  - [ ] Create `supabase/migrations/04_applications.sql` defining `applications` table with `status_history` JSONB, user notes, and RLS scoped to `auth.uid()`.
-    - Migration must backfill one row with status `'Found'` for every existing job that has no application row.
-    - Configure database trigger / action logic to automatically create an application row with status `'Found'` whenever a new job is inserted.
-  - [ ] Build Kanban board UI with stage columns:
-    `Found` | `Shortlisted` | `Referral asked` | `Applied` | `Interview` | `Rejected` | `Offer`
-  - [ ] Implement **status dropdown selector** on each job/application card to transition stages and log timestamped events into `status_history`.
-  - [ ] (Optional Polish): Add drag-and-drop column movement once dropdown logic is solid.
-  - [ ] Implement per-job user notes field with auto-save / save action.
-  - [ ] Build Top-Level Metrics Header:
-    - Jobs found this week
-    - % Shortlisted (`Shortlisted / Total Found`)
-    - Applications sent
-    - Referral requests sent
-    - Interview rate (`Interviews / Applications`)
-    - Score sanity agreement % (from thumbs up vs down)
-  - [ ] Add filtering/sorting on tracker board (by fit score, date, company).
-- **Files Likely Touched**:
-  - `supabase/migrations/04_applications.sql`
+  - [x] Create `supabase/migrations/06_applications.sql` defining `applications` table with `stage_history` JSONB, user notes, `BEFORE UPDATE` handle_updated_at trigger, composite indexes `(user_id, stage)` and `(user_id, next_follow_up_date)`, and RLS scoped to `auth.uid()` with `jobs` ownership checks.
+  - [x] Implement timezone utilities in `src/lib/tracker/dates.ts` strictly using Asia/Kolkata (IST, UTC+5:30) for today, 7 days ago/ahead, follow-up due, and applications this week.
+  - [x] Implement metrics calculation in `src/lib/tracker/metrics.ts` based on `stage_history`:
+    - Response rate = applications that ever reached `interviewing` or `offer` / applications that ever reached `applied`.
+    - Referral conversion rate = applications that ever reached `referral_asked` and subsequently reached `applied` or beyond / applications that ever reached `referral_asked`.
+  - [x] Build responsive Application Tracker UI (`src/app/tracker/page.tsx` & `src/components/TrackerBoard.tsx`):
+    - Stage pill tabs (`All`, `🔔 Action Due`, `Saved`, `Referral Asked`, `Applied`, `Interviewing`, `Offer`, `Closed`).
+    - Top metrics cards: Active Pipeline, Applied This Week, Response Rate %, Referral Conversion %.
+    - Follow-up Nudges banner with quick `+7d Snooze`.
+    - Stage dropdown selector logging timestamped events to `stage_history`.
+    - Referral contact modal prompt when moving to `Referral Asked`.
+    - Inline editable metadata (Channel, Referrer Name, Applied Date IST, Next Follow-Up Date IST).
+    - Expandable Notes textarea with manual Save button.
+    - Integrated Outreach Drawer trigger ("✍️ Cover Note & Referral").
+  - [x] Connect Jobs Feed with Tracker:
+    - `"📌 Track"` button on untracked job cards.
+    - Stage badge on tracked jobs linking directly to `/tracker`.
+  - [x] Comprehensive Vitest test suite for dates (`dates.test.ts`) and historical conversion metrics (`metrics.test.ts`).
+- **Files Touched**:
+  - `supabase/migrations/06_applications.sql`
+  - `src/lib/tracker/dates.ts`, `src/lib/tracker/metrics.ts`
+  - `src/lib/tracker/__tests__/dates.test.ts`, `src/lib/tracker/__tests__/metrics.test.ts`
   - `src/app/tracker/page.tsx`, `src/app/tracker/actions.ts`
-  - `src/components/TrackerBoard.tsx`, `src/components/KanbanColumn.tsx`, `src/components/JobTrackerCard.tsx`
-  - `src/components/StatusDropdown.tsx`, `src/components/MetricsHeader.tsx`, `src/components/NotesEditor.tsx`
-  - `src/lib/metrics.ts`
+  - `src/components/TrackerBoard.tsx`, `src/components/JobsList.tsx`, `src/components/Navbar.tsx`
 - **"Done When" Test Criteria**:
-  1. All jobs from earlier phases automatically appear on the board in the 'Found' column (via migration backfill), and newly created jobs automatically create an application row.
-  2. Changing a job's status via dropdown updates its column immediately and appends a timestamped entry to `status_history`.
-  3. Adding/editing a note on a job persists across page reloads.
-  4. Metrics bar accurately displays: jobs found this week, % shortlisted, applications count, referral requests count, and interview rate %.
-  5. Pipeline reflects live state across all active applications.
+  1. [x] Jobs can be tracked from `/jobs` with one click and appear on `/tracker`.
+  2. [x] Stage transitions immediately update UI and append timestamped entry to `stage_history`.
+  3. [x] When moving to `applied` or `referral_asked`, `next_follow_up_date` defaults to today + 7 days (IST) if empty.
+  4. [x] Follow-up nudges flag active applications due for action using Asia/Kolkata timezone boundary.
+  5. [x] Response rate and referral conversion calculate correctly from `stage_history` (e.g. `applied -> interviewing -> rejected` counts as response).
+  6. [x] Application notes, channel, referrer name, and follow-up dates persist cleanly.
+  7. [x] All 10 Vitest test suites (90 tests) pass.
 
 ---
 

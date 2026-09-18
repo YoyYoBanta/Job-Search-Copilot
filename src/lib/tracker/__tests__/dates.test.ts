@@ -97,4 +97,10 @@ describe('Timezone & Date Utilities (Asia/Kolkata)', () => {
     expect(isAppliedThisWeek('2026-09-10', todayIST)).toBe(false); // 9 days ago
     expect(isAppliedThisWeek('2026-09-21', todayIST)).toBe(false); // future date
   });
+
+  it('calculates getDaysAheadIST correctly relative to IST date', () => {
+    const todayIST = '2026-09-19';
+    expect(getDaysAheadIST(7, todayIST)).toBe('2026-09-26');
+    expect(getDaysAheadIST(1, todayIST)).toBe('2026-09-20');
+  });
 });

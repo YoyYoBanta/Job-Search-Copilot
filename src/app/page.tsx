@@ -26,6 +26,11 @@ export default async function HomePage() {
     .eq('user_id', user.id)
     .eq('dismissed', false);
 
+  const { count: applicationsCount } = await supabase
+    .from('applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
   const hasResume = Boolean(profile?.resume_text?.trim());
 
   return (
@@ -35,14 +40,14 @@ export default async function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span className="badge badge-emerald">Phase 4 Active</span>
+              <span className="badge badge-emerald">Active</span>
               <span className="badge badge-amber">Single-User</span>
             </div>
             <h1 className="card-title" style={{ fontSize: '1.75rem' }}>
               Welcome back, {user.email}
             </h1>
             <p className="card-desc" style={{ maxWidth: '650px', marginTop: '0.5rem' }}>
-              Your personal Job Search Copilot is active. Target companies, job feeds, and AI fit matcher are ready to evaluate opportunities.
+              Your personal Job Search Copilot is active. Target companies, job feeds, AI fit scoring, tailored outreach, and application pipeline tracking are ready.
             </p>
           </div>
 
@@ -51,7 +56,7 @@ export default async function HomePage() {
               Target Companies ({companiesCount || 0})
             </Link>
             <Link href="/jobs" className="btn btn-primary">
-              View Ingested Jobs ({jobsCount || 0})
+              Matching Jobs ({jobsCount || 0})
             </Link>
           </div>
         </div>
@@ -91,7 +96,7 @@ export default async function HomePage() {
             <span className="badge badge-emerald">Active</span>
           </div>
           <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
-            {companiesCount || 0} target companies configured • {jobsCount || 0} active jobs ingested.
+            {companiesCount || 0} target companies configured • {jobsCount || 0} active matching jobs.
           </p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <Link href="/companies" className="btn btn-secondary" style={{ flex: 1, textAlign: 'center' }}>
@@ -107,29 +112,28 @@ export default async function HomePage() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>AI Matcher</h3>
-            <span className="badge badge-emerald">
-              Phase 3 Active
-            </span>
+            <span className="badge badge-emerald">Active</span>
           </div>
           <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
-            Sequential Groq scoring with seniority matcher, anti-fabrication bullet verification, and feedback.
+            Sequential Groq scoring with seniority matcher, anti-fabrication bullet verification, and outreach drafting.
           </p>
           <Link href="/jobs" className="btn btn-primary" style={{ width: '100%', textAlign: 'center' }}>
-            ⚡ Score Jobs
+            ⚡ Score & Review Jobs ({jobsCount || 0})
           </Link>
         </div>
 
-        {/* Tracker Preview Card */}
-        <div className="card" style={{ opacity: 0.85 }}>
+        {/* Pipeline Tracker Card */}
+        <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>Pipeline Tracker</h3>
-            <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
-              Phase 5
-            </span>
+            <span className="badge badge-emerald">Active</span>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            Kanban board tracking application stages (Found to Offer), notes, and pipeline metrics.
+          <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
+            {applicationsCount || 0} active applications tracked across pipeline stages with IST follow-up nudges.
           </p>
+          <Link href="/tracker" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
+            Open Tracker ({applicationsCount || 0})
+          </Link>
         </div>
       </div>
     </div>

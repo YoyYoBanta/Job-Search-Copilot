@@ -41,6 +41,10 @@ export async function trackJobAction(
     ];
 
     const appliedDate = initialStage === 'applied' ? getTodayIST() : null;
+    const nextFollowUpDate =
+      (initialStage === 'applied' || initialStage === 'referral_asked')
+        ? getDaysAheadIST(7)
+        : null;
 
     const { data: inserted, error: insertErr } = await supabase
       .from('applications')
@@ -49,6 +53,7 @@ export async function trackJobAction(
         job_id: jobId,
         stage: initialStage,
         applied_date: appliedDate,
+        next_follow_up_date: nextFollowUpDate,
         stage_history: initialHistory,
       })
       .select('*, jobs(*)')
@@ -133,6 +138,16 @@ export async function updateApplicationStageAction(
 
     if (extra?.next_follow_up_date !== undefined) {
       updatePayload.next_follow_up_date = extra.next_follow_up_date;
+    }
+
+    // When moving to 'applied' or 'referral_asked', default next_follow_up_date to today + 7 days (IST) if empty
+    if (newStage === 'applied' || newStage === 'referral_asked') {
+      const effectiveFollowUp = updatePayload.next_follow_up_date !== undefined
+        ? updatePayload.next_follow_up_date
+        : app.next_follow_up_date;
+      if (!effectiveFollowUp) {
+        updatePayload.next_follow_up_date = getDaysAheadIST(7);
+      }
     }
 
     const { error: updateErr } = await supabase
