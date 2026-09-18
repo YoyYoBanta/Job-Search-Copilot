@@ -33,11 +33,6 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Refresh auth token
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const path = request.nextUrl.pathname;
   const isPublicRoute =
     path === '/login' ||
@@ -45,26 +40,53 @@ export async function middleware(request: NextRequest) {
     path.startsWith('/_next') ||
     path.startsWith('/api/auth');
 
+  // Refresh auth token
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // 1. Unauthenticated users accessing protected routes -> /login
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
+  // 2. Authenticated user checks
   if (user) {
     const userEmail = (user.email || '').trim().toLowerCase();
     const isAuthorized = Boolean(allowedEmail && userEmail === allowedEmail);
 
-    if (!isAuthorized && path !== '/unauthorized') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/unauthorized';
-      return NextResponse.redirect(url);
+    if (!isAuthorized) {
+      // Sign out unauthorized user in middleware where response cookies can be modified
+      await supabase.auth.signOut();
+
+      // If already on /unauthorized, return response with cleared cookies directly (no loop)
+      if (path === '/unauthorized') {
+        return supabaseResponse;
+      }
+
+      // Redirect to /unauthorized with cleared cookie headers copied
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = '/unauthorized';
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+
+      return redirectResponse;
     }
 
+    // Authorized user accessing /login -> redirect to /profile
     if (isAuthorized && path === '/login') {
       const url = request.nextUrl.clone();
       url.pathname = '/profile';
-      return NextResponse.redirect(url);
+      const redirectResponse = NextResponse.redirect(url);
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+      return redirectResponse;
     }
   }
 
