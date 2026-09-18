@@ -2,6 +2,28 @@ import { describe, it, expect } from 'vitest';
 import { filterNewCandidateJobs } from '../deduplication';
 
 describe('Job Ingestion URL Deduplication & Dismissal Tests', () => {
+  it('a batch with one existing URL still inserts the other new jobs', () => {
+    // Scenario: Database already contains job-existing-1
+    const existingUrlsInDatabase = ['https://jobs.lever.co/stripe/job-existing-1'];
+
+    // Incoming batch has 3 jobs: 1 duplicate, 2 brand new
+    const candidateJobs = [
+      { url: 'https://jobs.lever.co/stripe/job-existing-1', title: 'Senior PM' },
+      { url: 'https://jobs.lever.co/stripe/job-new-2', title: 'Product Manager - Payments' },
+      { url: 'https://jobs.lever.co/stripe/job-new-3', title: 'Associate PM' },
+    ];
+
+    const result = filterNewCandidateJobs(candidateJobs, existingUrlsInDatabase);
+
+    // Should skip the 1 duplicate and return the 2 new jobs
+    expect(result.newJobs).toHaveLength(2);
+    expect(result.newJobs.map((j) => j.url)).toEqual([
+      'https://jobs.lever.co/stripe/job-new-2',
+      'https://jobs.lever.co/stripe/job-new-3',
+    ]);
+    expect(result.duplicatesCount).toBe(1);
+  });
+
   it('skips a dismissed job URL on re-fetch so it is never re-inserted', () => {
     // Scenario: User had imported job-123 and previously dismissed/soft-deleted it.
     // The database retains the row with dismissed = true.

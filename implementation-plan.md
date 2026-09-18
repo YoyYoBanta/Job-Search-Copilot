@@ -1,6 +1,6 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 2 — Code Complete (Awaiting Vercel Preview Verification)
+**Current Status:** Phase 2 Verified — Ready for Phase 3
 
 ---
 
@@ -59,6 +59,7 @@
 ## Phase 2 — Companies List, Job Ingestion (Greenhouse/Lever/Ashby), Filtering & Unit Tests, Deduplication, HTML Stripping, Paste a Job Form
 
 - **Goal**: Ingest public ATS job board feeds and manual submissions, sanitize descriptions, and strictly filter by role and location using a centralized configuration file with comprehensive unit tests.
+- **Status**: [x] Verified on Vercel Preview (All 8 criteria passed)
 - **Tasks**:
   - [x] Migration 02 applied in Supabase (verified: `public` schema has `profiles`, `companies`, `jobs`).
   - [x] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with idempotent RLS policies scoped to `auth.uid()`, foreign company ownership checks, and performance indexes. The `jobs` table schema must include:
@@ -97,21 +98,22 @@
   - `supabase/migrations/02_companies_and_jobs.sql`
   - `src/config/filters.ts`
   - `src/config/__tests__/filters.test.ts`
-  - `src/lib/ats/greenhouse.ts`, `src/lib/ats/lever.ts`, `src/lib/ats/ashby.ts`, `src/lib/ats/types.ts`, `src/lib/ats/fetcher.ts`
+  - `src/lib/ats/greenhouse.ts`, `src/lib/ats/lever.ts`, `src/lib/ats/ashby.ts`, `src/lib/ats/types.ts`, `src/lib/ats/fetcher.ts`, `src/lib/ats/deduplication.ts`
   - `src/lib/ats/__tests__/deduplication.test.ts`
   - `src/lib/sanitize.ts`
+  - `src/lib/__tests__/sanitize.test.ts`
   - `src/app/companies/page.tsx`, `src/app/companies/actions.ts`
   - `src/app/jobs/page.tsx`, `src/app/jobs/paste/page.tsx`, `src/app/jobs/actions.ts`
   - `src/components/CompanyManager.tsx`, `src/components/JobsList.tsx`, `src/components/EligibilityBadge.tsx`, `src/components/ScoreStatusBadge.tsx`
 - **"Done When" Test Criteria**:
-  1. `npm test` runs and passes all 11+ required filter and deduplication unit test scenarios without failures.
-  2. Adding a test company (e.g. Greenhouse/Lever/Ashby slug) and clicking "Fetch Jobs" imports only matching Product roles in India/Remote.
-  3. Newly fetched or pasted jobs have `score_status = 'pending'` in the database.
-  4. Non-product roles and excluded senior titles (e.g. "Director of Product", "Software Engineer") are filtered out.
-  5. Duplicate job URLs are not inserted twice.
-  6. Dismissing a job and re-fetching confirms the dismissed job is never re-inserted.
-  7. HTML formatting is stripped clean from descriptions in the database.
-  8. Submitting a manual job via "Paste a Job" stores the job correctly in Supabase.
+  1. [x] `npm test` runs and passes all required filter, deduplication, and sanitization unit test scenarios without failures.
+  2. [x] Adding a test company (e.g. Greenhouse/Lever/Ashby slug) and clicking "Fetch Jobs" imports only matching Product roles in India/Remote.
+  3. [x] Newly fetched or pasted jobs have `score_status = 'pending'` in the database.
+  4. [x] Non-product roles and excluded senior titles (e.g. "Director of Product", "Software Engineer") are filtered out.
+  5. [x] Duplicate job URLs are not inserted twice.
+  6. [x] Dismissing a job and re-fetching confirms the dismissed job is never re-inserted.
+  7. [x] HTML formatting is stripped clean from descriptions in the database.
+  8. [x] Submitting a manual job via "Paste a Job" stores the job correctly in Supabase.
 
 ---
 

@@ -64,16 +64,31 @@ export async function ingestJobsForCompany(
 
     const supabase = await createClient();
 
-    // 3. Query existing job URLs for deduplication
-    // Note: Do NOT filter by dismissed; dismissed jobs remain in DB and must not be re-imported
+    // 3. Query existing job URLs for this batch only, chunked in batches of 200
+    // Note: Does NOT filter by dismissed; dismissed rows are preserved in DB and skipped
     const candidateUrls = filteredJobs.map((j) => j.url);
-    const { data: existingRows } = await supabase
-      .from('jobs')
-      .select('job_url')
-      .eq('user_id', userId)
-      .in('job_url', candidateUrls);
+    const existingUrlsInDb: string[] = [];
+    const CHUNK_SIZE = 200;
 
-    const existingUrlsInDb = (existingRows || []).map((r: { job_url: string }) => r.job_url);
+    for (let i = 0; i < candidateUrls.length; i += CHUNK_SIZE) {
+      const chunk = candidateUrls.slice(i, i + CHUNK_SIZE);
+      const { data: existingRows, error: selectError } = await supabase
+        .from('jobs')
+        .select('job_url')
+        .eq('user_id', userId)
+        .in('job_url', chunk);
+
+      if (selectError) {
+        throw new Error(`Failed querying existing job URLs: ${selectError.message}`);
+      }
+
+      if (existingRows) {
+        for (const row of existingRows) {
+          existingUrlsInDb.push(row.job_url);
+        }
+      }
+    }
+
     const { newJobs: newJobsToInsert, duplicatesCount } = filterNewCandidateJobs(
       filteredJobs,
       existingUrlsInDb
@@ -100,15 +115,22 @@ export async function ingestJobsForCompany(
       score_status: 'pending',
     }));
 
-    const { error: insertError } = await supabase
+    // 5. Use upsert with ignoreDuplicates to safely handle race conditions and ignore duplicates
+    const { data: insertedRows, error: insertError } = await supabase
       .from('jobs')
-      .insert(insertPayload);
+      .upsert(insertPayload, {
+        onConflict: 'user_id,job_url',
+        ignoreDuplicates: true,
+      })
+      .select('id');
 
     if (insertError) {
-      throw new Error(`Database insert error: ${insertError.message}`);
+      throw new Error(`Database upsert error: ${insertError.message}`);
     }
 
-    metrics.newInserted = newJobsToInsert.length;
+    // Count only rows actually inserted
+    metrics.newInserted = insertedRows ? insertedRows.length : 0;
+    metrics.duplicatesCount = metrics.passedFilter - metrics.newInserted;
     return metrics;
   } catch (err: any) {
     metrics.error = err?.message || 'Unknown ingestion error';
