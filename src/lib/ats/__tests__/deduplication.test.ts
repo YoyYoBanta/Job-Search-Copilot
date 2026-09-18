@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterNewCandidateJobs } from '../fetcher';
+import { filterNewCandidateJobs } from '../deduplication';
 
 describe('Job Ingestion URL Deduplication & Dismissal Tests', () => {
   it('skips a dismissed job URL on re-fetch so it is never re-inserted', () => {

@@ -60,6 +60,7 @@
 
 - **Goal**: Ingest public ATS job board feeds and manual submissions, sanitize descriptions, and strictly filter by role and location using a centralized configuration file with comprehensive unit tests.
 - **Tasks**:
+  - [x] Migration 02 applied in Supabase (verified: `public` schema has `profiles`, `companies`, `jobs`).
   - [x] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with idempotent RLS policies scoped to `auth.uid()`, foreign company ownership checks, and performance indexes. The `jobs` table schema must include:
     - `dismissed`: `boolean` (default `false`)
     - `score_status`: `text` (default `'pending'`, constrained to `'pending' | 'scored' | 'failed'`)

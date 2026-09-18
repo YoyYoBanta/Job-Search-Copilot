@@ -2,21 +2,12 @@ import { CompanyRecord, IngestionMetrics, RawJobPosting } from './types';
 import { fetchGreenhouseJobs } from './greenhouse';
 import { fetchLeverJobs } from './lever';
 import { fetchAshbyJobs } from './ashby';
+import { filterNewCandidateJobs } from './deduplication';
 import { evaluateJobFilter } from '@/config/filters';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { createClient } from '@/lib/supabase/server';
 
-export function filterNewCandidateJobs<T extends { url: string }>(
-  candidateJobs: T[],
-  existingUrlsInDatabase: string[]
-): { newJobs: T[]; duplicatesCount: number } {
-  const existingUrlSet = new Set(existingUrlsInDatabase.map((u) => u.trim()));
-  const newJobs = candidateJobs.filter((job) => !existingUrlSet.has(job.url.trim()));
-  return {
-    newJobs,
-    duplicatesCount: candidateJobs.length - newJobs.length,
-  };
-}
+export { filterNewCandidateJobs };
 
 export async function fetchRawJobsForCompany(company: CompanyRecord): Promise<RawJobPosting[]> {
   switch (company.board_type) {
