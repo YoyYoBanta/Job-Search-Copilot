@@ -1,6 +1,6 @@
 /**
  * Centralized Job Filtering Configuration
- * Rules from context.md Section 7:
+ * Rules from context.md Section 7 & Phase 2 specifications:
  * - Whole-word / token matching for all terms.
  * - 'IN' is case-sensitive (uppercase only country code).
  * - Title must contain an included product role and NO excluded senior role.
@@ -39,27 +39,6 @@ export const APPROVED_INDIA_LOCATIONS = [
   'Chennai',
 ] as const;
 
-// Disallowed foreign regions/countries when associated with remote jobs
-export const DISALLOWED_FOREIGN_REGIONS = [
-  'US',
-  'USA',
-  'United States',
-  'North America',
-  'EU',
-  'Europe',
-  'EMEA',
-  'UK',
-  'United Kingdom',
-  'London',
-  'Germany',
-  'Berlin',
-  'Canada',
-  'Australia',
-  'Singapore',
-  'Latin America',
-  'LATAM',
-] as const;
-
 function escapeRegex(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -68,7 +47,6 @@ function escapeRegex(string: string): string {
  * Checks if text contains any of the search phrases matching whole words.
  */
 function containsWholePhrase(text: string, phrase: string, caseSensitive: boolean = false): boolean {
-  // Use word boundary \b
   const escaped = escapeRegex(phrase).replace(/\s+/g, '\\s+');
   const regex = new RegExp(`\\b${escaped}\\b`, caseSensitive ? '' : 'i');
   return regex.test(text);
@@ -131,13 +109,10 @@ export function evaluateLocation(location: string): {
 
   const loc = location.trim();
 
-  // 1. Check explicit India approved locations (case-insensitive)
+  // 1. Check explicit India approved locations or standalone uppercase IN country code
   const isApprovedIndiaCity = APPROVED_INDIA_LOCATIONS.some((city) =>
     containsWholePhrase(loc, city, false)
   );
-
-  // 2. Check case-sensitive standalone uppercase 'IN' country code token (e.g., "Bengaluru, IN")
-  // Note: must match uppercase \bIN\b, never lowercase "in" (e.g. "Hybrid in London")
   const isUppercaseIN = /\bIN\b/.test(loc);
 
   if (isApprovedIndiaCity || isUppercaseIN) {
@@ -147,36 +122,34 @@ export function evaluateLocation(location: string): {
     };
   }
 
-  // 3. Check Remote roles
-  const isRemote = /\bremote\b/i.test(loc) || /\bwork from anywhere\b/i.test(loc);
+  // 2. Check Remote roles
+  const isRemote =
+    /\bremote\b/i.test(loc) ||
+    /\bwork from anywhere\b/i.test(loc) ||
+    /\banywhere\b/i.test(loc);
 
   if (isRemote) {
-    // Check if remote is paired with a disallowed foreign region/country (e.g. "Remote - US", "Remote (EU only)")
-    for (const region of DISALLOWED_FOREIGN_REGIONS) {
-      // For 'US', 'EU', 'UK', ensure case-sensitive or whole token match
-      if (containsWholePhrase(loc, region, region.length <= 3)) {
-        return {
-          matched: false,
-          needsEligibilityCheck: false,
-          reason: `Remote role restricted to excluded region: "${region}"`,
-        };
-      }
-    }
+    // Check if the remote location names specific cities/countries/regions outside India
+    // Strip generic global/remote descriptor tokens and punctuation
+    const remainder = loc
+      .replace(
+        /\b(work from anywhere|work from home|fully remote|worldwide|distributed|flexible|anywhere|optional|remote|global|wfh|home|and|or)\b/gi,
+        ''
+      )
+      .replace(/[,\-\/\(\)\[\]&|•\s]/g, '')
+      .trim();
 
-    // Check if remote is explicitly paired with India or APAC
-    const isIndiaOrApac =
-      APPROVED_INDIA_LOCATIONS.some((city) => containsWholePhrase(loc, city, false)) ||
-      /\bIN\b/.test(loc) ||
-      /\bAPAC\b/i.test(loc);
-
-    if (isIndiaOrApac) {
+    // If there is leftover text naming specific foreign cities/countries (and no India location),
+    // treat as region-restricted remote and EXCLUDE (Bug 2 fix).
+    if (remainder.length > 0) {
       return {
-        matched: true,
+        matched: false,
         needsEligibilityCheck: false,
+        reason: `Remote role is region-restricted to non-India locations (${loc})`,
       };
     }
 
-    // General / country-less Remote (e.g. "Remote", "Remote - Global", "Worldwide")
+    // Pure country-less Remote (e.g. "Remote", "Remote - Global", "Remote (Worldwide)", "Anywhere")
     return {
       matched: true,
       needsEligibilityCheck: true, // Flag with "Check eligibility" badge

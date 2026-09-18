@@ -5,12 +5,48 @@ import {
   evaluateLocation,
 } from '../filters';
 
-describe('Job Filters Specification Tests (Section 7 Requirements)', () => {
-  describe('Location & Remote Eligibility Tests', () => {
+describe('Job Filters Specification Tests', () => {
+  describe('Location & Remote Eligibility Tests (including Bug 2 Fixes)', () => {
     it('passes "Bengaluru, IN" (India city + uppercase IN country code)', () => {
       const res = evaluateLocation('Bengaluru, IN');
       expect(res.matched).toBe(true);
       expect(res.needsEligibilityCheck).toBe(false);
+    });
+
+    it('passes "Bengaluru or Remote" (India city present with remote)', () => {
+      const res = evaluateLocation('Bengaluru or Remote');
+      expect(res.matched).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(false);
+    });
+
+    it('fails "New York City, Toronto, Chicago, or Remote" (region-restricted remote with foreign cities)', () => {
+      const res = evaluateLocation('New York City, Toronto, Chicago, or Remote');
+      expect(res.matched).toBe(false);
+      expect(res.reason).toContain('region-restricted');
+    });
+
+    it('passes plain "Remote" with Check eligibility badge (country-less general remote)', () => {
+      const res = evaluateLocation('Remote');
+      expect(res.matched).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(true);
+    });
+
+    it('passes "Remote - Global" with Check eligibility badge', () => {
+      const res = evaluateLocation('Remote - Global');
+      expect(res.matched).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(true);
+    });
+
+    it('passes "Remote (Worldwide)" with Check eligibility badge', () => {
+      const res = evaluateLocation('Remote (Worldwide)');
+      expect(res.matched).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(true);
+    });
+
+    it('passes "Anywhere" with Check eligibility badge', () => {
+      const res = evaluateLocation('Anywhere');
+      expect(res.matched).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(true);
     });
 
     it('fails "Singapore" (non-India location and not matching IN token)', () => {
@@ -26,12 +62,6 @@ describe('Job Filters Specification Tests (Section 7 Requirements)', () => {
     it('fails "Remote - US" (remote tied to foreign country)', () => {
       const res = evaluateLocation('Remote - US');
       expect(res.matched).toBe(false);
-    });
-
-    it('passes "Remote" with Check eligibility badge (country-less general remote)', () => {
-      const res = evaluateLocation('Remote');
-      expect(res.matched).toBe(true);
-      expect(res.needsEligibilityCheck).toBe(true);
     });
 
     it('passes "Hybrid - Gurugram" (hybrid paired with approved India city)', () => {
@@ -136,6 +166,17 @@ describe('Job Filters Specification Tests (Section 7 Requirements)', () => {
     it('fails Product Manager in Remote - US', () => {
       const res = evaluateJobFilter('Product Manager', 'Remote - US');
       expect(res.passed).toBe(false);
+    });
+
+    it('fails Product Manager in New York City, Toronto, Chicago, or Remote', () => {
+      const res = evaluateJobFilter('Product Manager', 'New York City, Toronto, Chicago, or Remote');
+      expect(res.passed).toBe(false);
+    });
+
+    it('passes Product Manager in Bengaluru or Remote', () => {
+      const res = evaluateJobFilter('Product Manager', 'Bengaluru or Remote');
+      expect(res.passed).toBe(true);
+      expect(res.needsEligibilityCheck).toBe(false);
     });
   });
 });

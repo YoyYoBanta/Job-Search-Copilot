@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { dismissJobAction, restoreJobAction } from '@/app/jobs/actions';
+import { useState, useTransition } from 'react';
+import { dismissJobAction, restoreJobAction, recleanJobDescriptionsAction } from '@/app/jobs/actions';
 import { LocalTime } from '@/components/LocalTime';
 import { EligibilityBadge } from '@/components/EligibilityBadge';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
@@ -36,9 +36,20 @@ export function JobsList({ initialJobs }: JobsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDismissed, setShowDismissed] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobRecord | null>(null);
+  const [isRecleaning, startRecleanTransition] = useTransition();
+  const [recleanMessage, setRecleanMessage] = useState<string | null>(null);
 
   const totalDismissed = initialJobs.filter((j) => j.dismissed).length;
   const activeJobsCount = initialJobs.length - totalDismissed;
+
+  const handleReclean = () => {
+    startRecleanTransition(async () => {
+      setRecleanMessage(null);
+      const res = await recleanJobDescriptionsAction();
+      setRecleanMessage(res.message);
+      setTimeout(() => setRecleanMessage(null), 5000);
+    });
+  };
 
   const filteredJobs = initialJobs.filter((job) => {
     // Hide dismissed jobs by default unless toggle is checked
@@ -73,7 +84,16 @@ export function JobsList({ initialJobs }: JobsListProps) {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleReclean}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8125rem', padding: '0.5rem 0.75rem' }}
+            disabled={isRecleaning || initialJobs.length === 0}
+            title="Re-run HTML sanitizer across all stored job descriptions"
+          >
+            {isRecleaning ? 'Re-cleaning...' : '🧹 Re-clean descriptions'}
+          </button>
           <Link href="/companies" className="btn btn-secondary" style={{ fontSize: '0.8125rem' }}>
             ⚙ Manage Feeds
           </Link>
@@ -82,6 +102,12 @@ export function JobsList({ initialJobs }: JobsListProps) {
           </Link>
         </div>
       </div>
+
+      {recleanMessage && (
+        <div className="alert alert-success" style={{ padding: '0.75rem 1rem', fontSize: '0.875rem' }}>
+          <span>{recleanMessage}</span>
+        </div>
+      )}
 
       {/* Search & Filter Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>

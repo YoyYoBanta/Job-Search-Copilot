@@ -130,5 +130,59 @@ export async function restoreJobAction(formData: FormData) {
   }
 }
 
+/**
+ * Re-runs HTML sanitization on all existing jobs for the current user.
+ * Fixes previously stored raw/entity-encoded descriptions.
+ */
+export async function recleanJobDescriptionsAction(): Promise<{
+  success: boolean;
+  message: string;
+  cleanedCount: number;
+}> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    const { data: jobs, error } = await supabase
+      .from('jobs')
+      .select('id, description')
+      .eq('user_id', user.id);
+
+    if (error || !jobs) {
+      return {
+        success: false,
+        message: error?.message || 'Failed to fetch jobs.',
+        cleanedCount: 0,
+      };
+    }
+
+    let cleanedCount = 0;
+    for (const job of jobs) {
+      const sanitized = sanitizeHtml(job.description);
+      if (sanitized !== job.description) {
+        await supabase
+          .from('jobs')
+          .update({ description: sanitized })
+          .eq('id', job.id)
+          .eq('user_id', user.id);
+        cleanedCount++;
+      }
+    }
+
+    revalidatePath('/jobs');
+    return {
+      success: true,
+      message: `Re-cleaned descriptions for ${cleanedCount} of ${jobs.length} jobs.`,
+      cleanedCount,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Unexpected error while re-cleaning descriptions.',
+      cleanedCount: 0,
+    };
+  }
+}
+
 // Alias for backwards compatibility
 export const deleteJobAction = dismissJobAction;
