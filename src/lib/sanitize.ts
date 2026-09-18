@@ -46,7 +46,7 @@ export function sanitizeHtml(html: string): string {
   text = text.replace(/<!--[\s\S]*?-->/g, ' ');
 
   // 4. Convert block level elements and list items to newlines/bullets
-  text = text.replace(/<\/(p|div|h[1-6]|tr|blockquote)>/gi, '\n');
+  text = text.replace(/<\/(p|div|h[1-6]|tr|blockquote|ul|ol)>/gi, '\n');
   text = text.replace(/<br\s*[\/]?>/gi, '\n');
   text = text.replace(/<li\b[^>]*>/gi, '\n• ');
   text = text.replace(/<\/li>/gi, '');
@@ -61,13 +61,7 @@ export function sanitizeHtml(html: string): string {
   text = text
     .split('\n')
     .map((line) => line.replace(/[ \t]+/g, ' ').trim())
-    .filter((line, idx, arr) => {
-      // Avoid more than 2 consecutive empty lines
-      if (line === '' && arr[idx - 1] === '') {
-        return false;
-      }
-      return true;
-    })
+    .filter((line) => line.length > 0)
     .join('\n');
 
   return text.trim();
