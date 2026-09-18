@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react';
 import { dismissJobAction, restoreJobAction, recleanJobDescriptionsAction, resetJobScoreAction } from '@/app/jobs/actions';
+import { trackJobAction } from '@/app/tracker/actions';
 import { LocalTime } from '@/components/LocalTime';
 import { EligibilityBadge } from '@/components/EligibilityBadge';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
@@ -49,14 +50,22 @@ export interface JobRecord {
 interface JobsListProps {
   initialJobs: JobRecord[];
   initialFeedbacks?: Record<string, 'up' | 'down'>;
+  initialApplicationsMap?: Record<string, { id: string; stage: string }>;
 }
 
 type SortOption = 'score_desc' | 'score_asc' | 'newest' | 'oldest';
 type SeniorityFilter = 'all' | 'fit' | 'over' | 'under';
 type StatusFilter = 'all' | 'pending' | 'scored' | 'failed';
 
-export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) {
+export function JobsList({
+  initialJobs,
+  initialFeedbacks = {},
+  initialApplicationsMap = {},
+}: JobsListProps) {
   const [jobs, setJobs] = useState<JobRecord[]>(initialJobs);
+  const [applicationsMap, setApplicationsMap] = useState<
+    Record<string, { id: string; stage: string }>
+  >(initialApplicationsMap);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDismissed, setShowDismissed] = useState(false);
   const [seniorityFilter, setSeniorityFilter] = useState<SeniorityFilter>('all');
@@ -220,6 +229,45 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
       );
       setActionMessage({ text: err?.message || 'Unexpected dismiss error', isError: true });
       setTimeout(() => setActionMessage(null), 6000);
+    }
+  };
+
+  /**
+   * Track job in application tracker (Phase 5)
+   */
+  const handleTrackJob = async (jobId: string) => {
+    // Optimistic badge update
+    setApplicationsMap((prev) => ({
+      ...prev,
+      [jobId]: { id: 'temp', stage: 'saved' },
+    }));
+
+    try {
+      const res = await trackJobAction(jobId, 'saved');
+      if (res.success && res.application) {
+        setApplicationsMap((prev) => ({
+          ...prev,
+          [jobId]: { id: res.application.id, stage: res.application.stage },
+        }));
+        setActionMessage({ text: res.message || 'Added to Tracker!', isError: false });
+        setTimeout(() => setActionMessage(null), 4000);
+      } else {
+        setApplicationsMap((prev) => {
+          const copy = { ...prev };
+          delete copy[jobId];
+          return copy;
+        });
+        setActionMessage({ text: res.error || 'Failed to track job', isError: true });
+        setTimeout(() => setActionMessage(null), 5000);
+      }
+    } catch (err: any) {
+      setApplicationsMap((prev) => {
+        const copy = { ...prev };
+        delete copy[jobId];
+        return copy;
+      });
+      setActionMessage({ text: err?.message || 'Unexpected tracking error', isError: true });
+      setTimeout(() => setActionMessage(null), 5000);
     }
   };
 
@@ -655,6 +703,24 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                       </h3>
                       <ScoreStatusBadge status={job.score_status} fitScore={job.fit_score} scoreError={job.score_error} />
                       <SeniorityBadge seniority={job.seniority_match} />
+                      {applicationsMap[job.id] && (
+                        <Link
+                          href="/tracker"
+                          className="badge"
+                          style={{
+                            backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                            color: '#818cf8',
+                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            textDecoration: 'none',
+                            cursor: 'pointer',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                          }}
+                          title="View in Application Tracker"
+                        >
+                          📌 {applicationsMap[job.id].stage.replace('_', ' ')}
+                        </Link>
+                      )}
                       {job.needs_eligibility_check && <EligibilityBadge />}
                       {job.dismissed && (
                         <span className="badge badge-rose" style={{ fontSize: '0.6875rem' }}>
@@ -803,6 +869,18 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                             title="Draft outreach anyway for non-fit role"
                           >
                             {job.cover_note ? 'View draft' : 'Draft anyway'}
+                          </button>
+                        )}
+
+                        {!applicationsMap[job.id] && (
+                          <button
+                            type="button"
+                            onClick={() => handleTrackJob(job.id)}
+                            className="btn btn-secondary"
+                            style={{ padding: '0.375rem 0.65rem', fontSize: '0.75rem' }}
+                            title="Track this job in Application Tracker"
+                          >
+                            📌 Track
                           </button>
                         )}
                       </>

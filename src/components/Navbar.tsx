@@ -19,6 +19,9 @@ export async function Navbar() {
               <Link href="/jobs" className="nav-link">
                 Jobs
               </Link>
+              <Link href="/tracker" className="nav-link">
+                Tracker
+              </Link>
               <Link href="/companies" className="nav-link">
                 Companies
               </Link>

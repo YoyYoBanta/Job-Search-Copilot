@@ -26,11 +26,24 @@ export default async function JobsPage() {
     }
   });
 
+  const { data: applications } = await supabase
+    .from('applications')
+    .select('id, job_id, stage')
+    .eq('user_id', user.id);
+
+  const applicationsMap: Record<string, { id: string; stage: string }> = {};
+  applications?.forEach((app) => {
+    if (app.job_id) {
+      applicationsMap[app.job_id] = { id: app.id, stage: app.stage };
+    }
+  });
+
   return (
     <div style={{ maxWidth: '1000px', margin: '1rem auto 3rem' }}>
       <JobsList
         initialJobs={(jobs as JobRecord[]) || []}
         initialFeedbacks={feedbackMap}
+        initialApplicationsMap={applicationsMap}
       />
     </div>
   );

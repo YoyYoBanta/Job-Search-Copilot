@@ -183,26 +183,33 @@
 
 ## Phase 4 — Tailor: Cover Note + Referral Message with Copy Buttons
 
-- **Goal**: Generate tailored 120-word cover notes and 60-word LinkedIn referral outreach messages on demand per job, with one-click copy actions.
+- **Goal**: Generate tailored cover notes (130-170 words) and LinkedIn referral outreach messages (<90 words) on demand per job, with strict grounding, anti-cliché detection, overwrite protections, and one-click copy actions.
+- **Status**: [x] Verified on Vercel Preview (All criteria passed)
 - **Tasks**:
-  - [ ] Create Groq prompt templates for tailored assets:
-    - **Cover Note**: ~120 words, plain and non-salesy tone, strictly truthful to resume facts.
-    - **LinkedIn Referral Request**: ~60 words, concise, professional, authentic outreach copy.
-  - [ ] Implement Server Action / API route to generate outreach assets on demand for a selected job.
-  - [ ] Store generated copy in Supabase associated with the job record.
-  - [ ] Build "Tailor" UI modal / drawer:
-    - Display generated Cover Note and Referral Message.
-    - 1-click "Copy to Clipboard" button with visual "Copied!" feedback state for each.
-    - Editable text area in case user wants to tweak before copying.
-- **Files Likely Touched**:
-  - `src/lib/tailor/prompts.ts`, `src/lib/tailor/generator.ts`
-  - `src/components/TailorModal.tsx`, `src/components/CopyButton.tsx`
-  - `src/app/jobs/[id]/tailor/actions.ts`
+  - [x] Create Groq prompt templates for tailored assets with style reference and strict rules:
+    - **Cover Note**: 130–170 words, hook opener mapped to JD requirements, 2–3 strongest facts, show don't label, shared domain mention, plain closing.
+    - **LinkedIn Referral Request**: <90 words, relationship-adjusted CTA (cold = 10-min chat ask), 1 proof point, mandatory full company name + job URL.
+  - [x] Implement Server Action / API endpoint to generate outreach assets on demand for a selected job (`/jobs/[id]/tailor/actions.ts`).
+  - [x] Store generated copy, last-generated baseline, and outreach model in Supabase `jobs` table (`05_tailored_outreach.sql`).
+  - [x] Build "Tailor" UI Drawer / Modal:
+    - Display generated Cover Note and Referral Message with editable text areas.
+    - 1-click "Copy to Clipboard" button with visual "Copied!" feedback state.
+    - Word count indicators and live cliché / gap / ungrounded warnings.
+    - Overwrite confirmation alert if user edited text before regenerating.
+    - Model source badge showing which model generated the copy.
+  - [x] Anti-fabrication grounding check for company and product entities against resume + JD corpus.
+- **Files Touched**:
+  - `src/lib/tailor/prompts.ts`, `src/lib/tailor/generator.ts`, `src/lib/tailor/validator.ts`, `src/lib/tailor/schema.ts`
+  - `src/lib/tailor/__tests__/prompts.test.ts`, `src/lib/tailor/__tests__/validator.test.ts`
+  - `src/components/TailorDrawer.tsx`, `src/components/JobsList.tsx`
+  - `src/app/jobs/actions.ts`, `supabase/migrations/05_tailored_outreach.sql`
 - **"Done When" Test Criteria**:
-  1. Clicking "Tailor" on a job calls Groq and generates both a ~120-word cover note and a ~60-word referral message.
-  2. Tone is plain and non-salesy, referencing only experiences present in the user's profile.
-  3. Clicking "Copy" on either card copies the exact text to clipboard and shows visual confirmation.
-  4. Generated notes persist so viewing the job again doesn't require regenerating unless requested.
+  1. [x] Clicking "✍️ Draft Outreach" on a scored fit job opens drawer and generates grounded cover note and referral message.
+  2. [x] Tone is direct, factual, and strictly truthful to resume + JD, with no corporate clichés or gap apologies.
+  3. [x] Entity grounding check verifies companies/tools appear in resume or JD.
+  4. [x] 1-click Copy buttons copy text cleanly to clipboard.
+  5. [x] Editing text and clicking regenerate prompts for confirmation before overwriting edits.
+  6. [x] All Vitest tests pass (82 tests across 8 suites) and Vercel production deployment is verified green.
 
 ---
 
