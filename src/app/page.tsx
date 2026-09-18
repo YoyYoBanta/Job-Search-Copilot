@@ -1,5 +1,6 @@
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { LocalTime } from '@/components/LocalTime';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -53,9 +54,14 @@ export default async function HomePage() {
             )}
           </div>
           <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-            {hasResume
-              ? `Stored in Supabase (last updated ${new Date(profile!.updated_at).toLocaleDateString()}).`
-              : 'No resume found. Paste your resume text once to enable match scoring.'}
+            {hasResume ? (
+              <>
+                Stored in Supabase (last updated{' '}
+                <LocalTime isoDate={profile!.updated_at} format="date" />).
+              </>
+            ) : (
+              'No resume found. Paste your resume text once to enable match scoring.'
+            )}
           </p>
           <Link href="/profile" className="btn btn-secondary" style={{ width: '100%' }}>
             Manage Resume

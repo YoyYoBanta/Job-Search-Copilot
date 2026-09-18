@@ -31,6 +31,7 @@ Job AI/
     │       └── server.ts            # Async server client helper (@supabase/ssr + cookies)
     ├── components/
     │   ├── Navbar.tsx               # Global navigation, brand badge, user email & logout
+    │   ├── LocalTime.tsx            # Client browser timezone formatter component
     │   └── ResumeEditor.tsx         # Client resume text editor with live metrics & alert states
     └── app/
         ├── globals.css              # Vanilla CSS dark design system & tokens

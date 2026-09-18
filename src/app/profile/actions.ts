@@ -8,7 +8,7 @@ export interface ProfileActionState {
   error?: string;
   success?: boolean;
   message?: string;
-  updatedAt?: string;
+  updatedAt?: string; // ISO-8601 string
 }
 
 export async function saveResumeAction(
@@ -18,6 +18,7 @@ export async function saveResumeAction(
   try {
     const user = await requireAuth();
     const resumeText = (formData.get('resume_text') as string || '').trim();
+    const isoTimestamp = new Date().toISOString();
 
     const supabase = await createClient();
 
@@ -27,7 +28,7 @@ export async function saveResumeAction(
         {
           user_id: user.id,
           resume_text: resumeText,
-          updated_at: new Date().toISOString(),
+          updated_at: isoTimestamp,
         },
         { onConflict: 'user_id' }
       );
@@ -43,7 +44,7 @@ export async function saveResumeAction(
     return {
       success: true,
       message: 'Resume profile saved successfully!',
-      updatedAt: new Date().toLocaleTimeString(),
+      updatedAt: isoTimestamp,
     };
   } catch (err: any) {
     return {

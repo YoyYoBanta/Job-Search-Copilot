@@ -165,6 +165,7 @@ Store all sensitive secrets and configuration in `.env.local` and maintain a doc
 - **Dependencies & Lockfile**: Dependencies are added by editing `package.json` only. `package-lock.json` may be out of date; CI and Vercel run `npm install`.
 - **Vercel Previews & CI**: Builds and previews run on Vercel (preview deployment per push to GitHub). Build errors are read from Vercel's deployment logs.
 - **Automated Testing**: Tests (`npm test`) and type checks run in GitHub Actions on every push.
+- **Timestamp & Timezone Formatting**: All displayed timestamps across all UI pages must be formatted client-side in the browser using the user's local timezone (e.g., via `toLocaleString()` / `toLocaleTimeString()`). Server Actions, API routes, and database records must always return and store standard ISO-8601 strings (e.g., `new Date().toISOString()`), never server-locale formatted strings.
 - **Two-State Phase Completion**: Every phase has two distinct states:
   1. **"Code complete"**: All code and tests written and pushed.
   2. **"Verified"**: Its "done when" tests passed on the Vercel preview / GitHub Actions. Only mark a phase Verified after the user explicitly confirms the tests passed.

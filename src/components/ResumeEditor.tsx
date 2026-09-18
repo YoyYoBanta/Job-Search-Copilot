@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { saveResumeAction, type ProfileActionState } from '@/app/profile/actions';
+import { LocalTime } from '@/components/LocalTime';
 
 interface ResumeEditorProps {
   initialResumeText: string;
@@ -20,6 +21,7 @@ export function ResumeEditor({
 
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0;
   const charCount = resumeText.length;
+  const currentUpdatedAt = state?.updatedAt || initialUpdatedAt;
 
   return (
     <div className="card">
@@ -31,9 +33,9 @@ export function ResumeEditor({
           </p>
         </div>
 
-        {initialUpdatedAt && (
+        {currentUpdatedAt && (
           <div className="badge badge-emerald">
-            <span>Last saved: {new Date(initialUpdatedAt).toLocaleString()}</span>
+            <LocalTime isoDate={currentUpdatedAt} format="datetime" prefix="Last saved: " />
           </div>
         )}
       </div>
@@ -55,7 +57,13 @@ export function ResumeEditor({
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-          <span>{state.message} {state.updatedAt && `(${state.updatedAt})`}</span>
+          <span>
+            {state.message}{' '}
+            {state.updatedAt && (
+              <LocalTime isoDate={state.updatedAt} format="time" prefix="(" />
+            )}
+            {state.updatedAt && ')'}
+          </span>
         </div>
       )}
 
