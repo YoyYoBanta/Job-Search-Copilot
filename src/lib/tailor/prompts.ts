@@ -43,6 +43,16 @@ export const FORBIDDEN_CLICHES = [
   'while i do not have',
   "haven't worked with",
   'have not worked with',
+  // Labeling / meta commentary & resume cliches
+  'showing',
+  'demonstrates',
+  'demonstrating',
+  'honed my skills',
+  'proven ability',
+  'i am ready to',
+  'measurable impact',
+  'thank you for considering',
+  'product-focused builder',
 ];
 
 /**
@@ -55,32 +65,35 @@ Your task is to write two tailored, high-converting outreach assets for a candid
 2. A direct LinkedIn Referral DM (STRICT LENGTH: under 90 words).
 
 CRITICAL NON-NEGOTIABLE RULES:
+
 1. STRICT DATA TRUTHFULNESS & GROUNDING:
-   - Every company name, tool, product, metric, and skill you mention MUST appear in either:
+   - Every company name, tool, product, metric, and skill mentioned MUST appear in either:
      a) The candidate's resume, OR
      b) The target job description / company name.
-   - NEVER invent or mention ungrounded third-party employers, tools, or metrics not present in the inputs.
-2. TONE & BANNED PHRASES:
-   - Use plain, punchy, confident, and professional product language.
-   - FORBIDDEN PHRASES & CLICHÉS: DO NOT use any of these phrases or words: ${FORBIDDEN_CLICHES.map((c) => `"${c}"`).join(', ')}.
-   - DO NOT state gaps, weaknesses, or shortcomings. Do NOT apologize or explain what the candidate lacks. Instead, proactively emphasize closest related experience and transferable product achievements.
-3. LENGTH LIMITS:
-   - Cover Note: MUST be between 130 and 170 words.
-   - Referral Message: MUST be strictly under 90 words.
-4. CONTENT REQUIREMENTS:
-   - COVER NOTE (130–170 words):
-     * Hook immediately with relevant PM domain experience and 1–2 tangible strengths from candidate's background.
-     * Emphasize closest related experience relevant to the job's core challenges.
-     * End with a direct, professional closing statement.
-   - LINKEDIN REFERRAL MESSAGE (under 90 words):
-     * Greeting: Use the recipient's name if provided (e.g. "Hi [Name],"), otherwise "Hi," or "Hi there,".
-     * Tone tailored by relationship:
-       - 'alumni': mention shared university/alumni connection warmly.
-       - 'ex-colleague': warm peer tone referencing past time working together.
-       - 'mutual_connection': polite reference to mutual network.
-       - 'cold': crisp, respectful, professional.
-     * MUST explicitly reference the job title AND the exact job URL provided in the prompt.
-     * Ask if they are open to submitting an internal referral or introducing to the hiring team.
+   - NEVER invent ungrounded third-party employers, tools, or metrics not present in the inputs.
+
+2. FORBIDDEN PHRASES & CLICHÉS:
+   - DO NOT use any of these phrases or words: ${FORBIDDEN_CLICHES.map((c) => `"${c}"`).join(', ')}.
+   - DO NOT state gaps, weaknesses, or shortcomings. Emphasize closest related experience and transferable product achievements.
+
+3. COVER NOTE RULES (130–170 words):
+   - Hook: Open by naming 1-2 specific requirements or challenges from the JD, followed immediately by how the candidate has solved or delivered that exact type of work. DO NOT open with "At [Company], I..." or "Throughout my career...".
+   - Targeted JD Mapping: Pick the 2-3 resume facts/achievements that best match the role's needs; skip the rest (fewer, stronger facts).
+   - Show, Don't Label: State actions and numbers plainly without meta-labeling. Never use "showing", "demonstrates", "demonstrating", "honed my skills", "proven ability", or "I am ready to".
+   - Shared Domain / Sector: If the resume and target JD share a domain/sector (e.g., fintech, education, B2B SaaS, developer tools, healthtech, marketplace), mention this shared sector alignment in one clean line.
+   - Plain Closing: Close with one grounded sentence directly linking the candidate's specific background to the company's work. Never use "measurable impact" or generic filler.
+   - Word count MUST be between 130 and 170 words.
+
+4. LINKEDIN REFERRAL MESSAGE RULES (under 90 words):
+   - Greeting: Use the recipient's name if provided (e.g., "Hi [Name],"), otherwise "Hi," or "Hi there,".
+   - Relationship-Adjusted Ask:
+     * 'cold': Ask for a brief 10-minute chat first to discuss the team and their work; mention the referral only as a possible next step.
+     * 'alumni', 'ex-colleague', 'mutual_connection': Use a warm tone reflecting the connection and you may ask directly for an internal referral.
+   - Proof Point: Include ONE single proof point only, stated plainly.
+   - Banned Phrases: Never use "Thank you for considering" or "product-focused builder".
+   - Role & Link: MUST explicitly include the target job title AND the exact job URL provided.
+   - Word count MUST be strictly under 90 words.
+
 5. OUTPUT FORMAT:
    - Return ONLY a valid JSON object with the exact keys:
      {
@@ -102,6 +115,10 @@ export function buildTailorUserPrompt(inputs: TailorPromptInputs): string {
     : 'Recipient Name: Not specified (use generic greeting)';
 
   const relationshipContext = inputs.relationship || 'cold';
+
+  const relationshipGuidance = relationshipContext === 'cold'
+    ? 'Cold outreach: Ask for a brief 10-minute chat first; mention the referral only as a potential next step.'
+    : `Connection type '${relationshipContext}': Warm outreach referencing the connection; may ask for the referral directly.`;
 
   return `Candidate Profile:
 - Total Experience: ${inputs.totalYearsExperience ?? 'Not specified'} years
@@ -131,11 +148,20 @@ Match Highlights:
 
 Referral Context:
 - ${recipientGreeting}
-- Relationship Type: ${relationshipContext}
+- Relationship: ${relationshipContext}
+- Strategy: ${relationshipGuidance}
 
 Instructions:
-1. Cover Note: Write 130–170 words emphasizing closest related experience. Do NOT mention gaps.
-2. LinkedIn Referral DM: Write under 90 words tailored for relationship "${relationshipContext}". MUST include job title "${inputs.jobTitle}" and job link "${inputs.jobUrl}".
-3. Ensure every company/tool name appears in the resume or JD.
+1. Cover Note (130–170 words):
+   - Open with a hook naming 1-2 specific requirements from the JD that the candidate has delivered (NO "At [Company], I..." opener).
+   - Pick the 2-3 best matching proof points mapped to the JD; skip the rest.
+   - If resume and JD share a domain/sector, mention it in one line.
+   - Show, don't label (no "showing", "demonstrates", "honed my skills", "proven ability", "I am ready to").
+   - Close with one plain sentence linking experience to ${inputs.companyName}'s work (no "measurable impact").
+2. Referral DM (under 90 words):
+   - ${relationshipGuidance}
+   - Include exactly ONE proof point stated plainly (no "Thank you for considering", no "product-focused builder").
+   - MUST include the job title "${inputs.jobTitle}" and job link "${inputs.jobUrl}".
+3. Grounding: All entities/metrics must be from the resume or JD.
 4. Output valid JSON only with keys "cover_note" and "referral_message".`;
 }

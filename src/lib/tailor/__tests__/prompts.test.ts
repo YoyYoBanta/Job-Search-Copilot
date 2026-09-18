@@ -7,7 +7,7 @@ import {
 } from '../prompts';
 
 describe('Tailor Prompts Construction Tests', () => {
-  it('builds system prompt containing anti-fabrication, length bounds, and gap ban', () => {
+  it('builds system prompt containing anti-fabrication, length bounds, gap ban, and new cover/referral rules', () => {
     const sysPrompt = buildTailorSystemPrompt();
     expect(sysPrompt).toContain('STRICT DATA TRUTHFULNESS & GROUNDING');
     expect(sysPrompt).toContain('130–170 words');
@@ -16,11 +16,25 @@ describe('Tailor Prompts Construction Tests', () => {
     expect(sysPrompt).toContain('"cover_note"');
     expect(sysPrompt).toContain('"referral_message"');
 
-    // Check presence of banned gap phrases in system prompt
-    expect(sysPrompt.toLowerCase()).toContain('lack');
-    expect(sysPrompt.toLowerCase()).toContain('no experience');
-    expect(sysPrompt.toLowerCase()).toContain("although i haven't");
-    expect(sysPrompt.toLowerCase()).toContain("while i don't have");
+    // Cover note rules
+    expect(sysPrompt).toContain('Hook: Open by naming 1-2 specific requirements');
+    expect(sysPrompt).toContain('Show, Don\'t Label');
+    expect(sysPrompt).toContain('Shared Domain / Sector');
+    expect(sysPrompt).toContain('Plain Closing');
+
+    // Referral rules
+    expect(sysPrompt).toContain('10-minute chat first');
+
+    // Check presence of banned phrases in system prompt / FORBIDDEN_CLICHES
+    expect(FORBIDDEN_CLICHES).toContain('showing');
+    expect(FORBIDDEN_CLICHES).toContain('demonstrates');
+    expect(FORBIDDEN_CLICHES).toContain('demonstrating');
+    expect(FORBIDDEN_CLICHES).toContain('honed my skills');
+    expect(FORBIDDEN_CLICHES).toContain('proven ability');
+    expect(FORBIDDEN_CLICHES).toContain('i am ready to');
+    expect(FORBIDDEN_CLICHES).toContain('measurable impact');
+    expect(FORBIDDEN_CLICHES).toContain('thank you for considering');
+    expect(FORBIDDEN_CLICHES).toContain('product-focused builder');
   });
 
   it('builds user prompt with recipient name, relationship context, job URL, and title', () => {
@@ -46,11 +60,11 @@ describe('Tailor Prompts Construction Tests', () => {
     const userPrompt = buildTailorUserPrompt(inputs);
 
     expect(userPrompt).toContain('Recipient Name: Sarah Jenkins');
-    expect(userPrompt).toContain('Relationship Type: alumni');
+    expect(userPrompt).toContain('Relationship: alumni');
     expect(userPrompt).toContain('https://stripe.com/jobs/12345');
     expect(userPrompt).toContain('Senior Product Manager, Growth');
     expect(userPrompt).toContain('Stripe');
-    expect(userPrompt).toContain('Do NOT mention gaps');
+    expect(userPrompt).toContain('NO "At [Company], I..." opener');
   });
 
   it('handles cold outreach with no recipient name and missing optional fields', () => {
@@ -67,7 +81,8 @@ describe('Tailor Prompts Construction Tests', () => {
     const userPrompt = buildTailorUserPrompt(inputs);
 
     expect(userPrompt).toContain('Recipient Name: Not specified');
-    expect(userPrompt).toContain('Relationship Type: cold');
+    expect(userPrompt).toContain('Relationship: cold');
+    expect(userPrompt).toContain('10-minute chat');
     expect(userPrompt).toContain('https://startupxyz.com/careers/apm');
   });
 });

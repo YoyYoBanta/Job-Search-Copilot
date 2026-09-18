@@ -74,6 +74,44 @@ describe('Tailor Validator & Schema Tests', () => {
       const blackText = 'Managed black box testing and updated the blacklist policy.';
       expect(findCliches(blackText)).toEqual([]);
     });
+
+    describe('New banned labeling & cliché phrases', () => {
+      it('flags "showing"', () => {
+        expect(findCliches('Led checkout conversion, showing 15% improvement.')).toContain('showing');
+      });
+
+      it('flags "demonstrates"', () => {
+        expect(findCliches('My track record demonstrates strong execution.')).toContain('demonstrates');
+      });
+
+      it('flags "demonstrating"', () => {
+        expect(findCliches('Demonstrating customer obsession in every release.')).toContain('demonstrating');
+      });
+
+      it('flags "honed my skills"', () => {
+        expect(findCliches('I honed my skills across 3 years at Swiggy.')).toContain('honed my skills');
+      });
+
+      it('flags "proven ability"', () => {
+        expect(findCliches('With a proven ability to lead engineering pods.')).toContain('proven ability');
+      });
+
+      it('flags "I am ready to" / "i am ready to"', () => {
+        expect(findCliches('I am ready to lead your global payments pod.')).toContain('i am ready to');
+      });
+
+      it('flags "measurable impact"', () => {
+        expect(findCliches('Looking to deliver measurable impact at your company.')).toContain('measurable impact');
+      });
+
+      it('flags "thank you for considering"', () => {
+        expect(findCliches('Thank you for considering my profile.')).toContain('thank you for considering');
+      });
+
+      it('flags "product-focused builder"', () => {
+        expect(findCliches('I am a product-focused builder with fintech experience.')).toContain('product-focused builder');
+      });
+    });
   });
 
   describe('Length Bound Enforcement Tests (Requirement 4)', () => {
