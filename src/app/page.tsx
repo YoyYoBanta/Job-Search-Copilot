@@ -15,6 +15,16 @@ export default async function HomePage() {
     .eq('user_id', user.id)
     .maybeSingle();
 
+  const { count: companiesCount } = await supabase
+    .from('companies')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
+  const { count: jobsCount } = await supabase
+    .from('jobs')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
   const hasResume = Boolean(profile?.resume_text?.trim());
 
   return (
@@ -24,20 +34,25 @@ export default async function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span className="badge badge-emerald">Phase 1 Active</span>
+              <span className="badge badge-emerald">Phase 2 Active</span>
               <span className="badge badge-amber">Single-User</span>
             </div>
             <h1 className="card-title" style={{ fontSize: '1.75rem' }}>
               Welcome back, {user.email}
             </h1>
             <p className="card-desc" style={{ maxWidth: '650px', marginTop: '0.5rem' }}>
-              Your personal Job Search Copilot is initialized and secure. Configure your profile resume below to power the ATS matcher and outreach tailor.
+              Your personal Job Search Copilot is active. Target companies and job feeds are configured with strict product role and location filters.
             </p>
           </div>
 
-          <Link href="/profile" className="btn btn-primary">
-            {hasResume ? 'Edit Profile & Resume' : 'Paste Your Resume →'}
-          </Link>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Link href="/companies" className="btn btn-secondary">
+              Target Companies ({companiesCount || 0})
+            </Link>
+            <Link href="/jobs" className="btn btn-primary">
+              View Ingested Jobs ({jobsCount || 0})
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -53,7 +68,7 @@ export default async function HomePage() {
               <span className="badge badge-amber">Needs Setup</span>
             )}
           </div>
-          <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+          <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
             {hasResume ? (
               <>
                 Stored in Supabase (last updated{' '}
@@ -68,17 +83,23 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        {/* ATS Ingestion Preview */}
-        <div className="card" style={{ opacity: 0.85 }}>
+        {/* ATS Ingestion Card */}
+        <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>Job Feeds & Filter</h3>
-            <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
-              Phase 2
-            </span>
+            <span className="badge badge-emerald">Phase 2 Active</span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>
-            Automated public board ingestion (Greenhouse, Lever, Ashby) with India/Remote whole-word filtering.
+          <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
+            {companiesCount || 0} target companies configured • {jobsCount || 0} matching jobs ingested.
           </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Link href="/companies" className="btn btn-secondary" style={{ flex: 1, textAlign: 'center' }}>
+              Companies
+            </Link>
+            <Link href="/jobs/paste" className="btn btn-secondary" style={{ flex: 1, textAlign: 'center' }}>
+              Paste Job
+            </Link>
+          </div>
         </div>
 
         {/* AI Matcher Preview */}
@@ -89,7 +110,7 @@ export default async function HomePage() {
               Phase 3
             </span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             Single-job sequential Groq scoring queue with strict JSON schema, 429 backoff, and feedback rating.
           </p>
         </div>
@@ -102,7 +123,7 @@ export default async function HomePage() {
               Phase 5
             </span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             Kanban board tracking application stages (Found to Offer), notes, and pipeline metrics.
           </p>
         </div>

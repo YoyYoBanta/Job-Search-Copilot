@@ -1,12 +1,13 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 1 — Code Complete (Awaiting verification on Vercel preview)
+**Current Status:** Phase 2 — Code Complete (Awaiting Vercel Preview Verification)
 
 ---
 
 ## Phase 1 — Setup, Supabase Schema (Profiles) with RLS, Email+Password Auth Restricted to ALLOWED_EMAIL, My Profile
 
 - **Goal**: Initialize the Next.js project, configure Supabase Email+Password Auth with single-user whitelist (`ALLOWED_EMAIL`), create `profiles` table with RLS, and build the "My Profile" resume management feature.
+- **Status**: [x] Verified on Vercel Preview (All 6 criteria passed)
 - **Tasks**:
   - [x] Initialize Next.js project with App Router, TypeScript, and modern styling.
   - [x] Create `.env.example` and `.env.local` template with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, and `ALLOWED_EMAIL`.
@@ -36,11 +37,11 @@
   - `src/app/login/page.tsx`, `src/app/unauthorized/page.tsx`
   - `src/app/profile/page.tsx`, `src/app/profile/actions.ts`
 - **"Done When" Test Criteria**:
-  1. **Unauthenticated Redirection**: Visiting `/profile` or `/` in an unauthenticated / incognito session redirects to `/login`.
-  2. **Authorized Login**: Logging in with email + password matching `ALLOWED_EMAIL` grants access to `/profile` and dashboard.
-  3. **Unauthorized User Block (Throwaway Account Test)**: Create a temporary second user via Supabase Dashboard → Authentication → Add User (with an email different from `ALLOWED_EMAIL`). Attempting to log in with this account immediately signs them out automatically on the server and displays the "Not Authorised" page. After landing on Not Authorised, visit `/profile` — it must redirect to `/login`. (Delete the throwaway user from Supabase after verification).
-  4. **Resume Persistence & Reload**: User can paste resume text into `/profile`, click "Save Resume Profile", hard-reload the page, and see the saved resume persisted from Supabase `profiles` table.
-  5. **SQL-Editor RLS Check**: In Supabase SQL Editor, run:
+  1. [x] **Unauthenticated Redirection**: Visiting `/profile` or `/` in an unauthenticated / incognito session redirects to `/login`.
+  2. [x] **Authorized Login**: Logging in with email + password matching `ALLOWED_EMAIL` grants access to `/profile` and dashboard.
+  3. [x] **Unauthorized User Block (Throwaway Account Test)**: Create a temporary second user via Supabase Dashboard → Authentication → Add User (with an email different from `ALLOWED_EMAIL`). Attempting to log in with this account immediately signs them out automatically on the server and displays the "Not Authorised" page. After landing on Not Authorised, visit `/profile` — it must redirect to `/login`. (Delete the throwaway user from Supabase after verification).
+  4. [x] **Resume Persistence & Reload**: User can paste resume text into `/profile`, click "Save Resume Profile", hard-reload the page, and see the saved resume persisted from Supabase `profiles` table.
+  5. [x] **SQL-Editor RLS Check**: In Supabase SQL Editor, run:
      ```sql
      begin;
      set local role anon;
@@ -51,7 +52,7 @@
      rollback;
      ```
      Expected result: both counts are 0.
-  6. **Signup Disabled**: "Allow new users to sign up" is verified disabled in Supabase dashboard settings after the owner account is created.
+  6. [x] **Signup Disabled**: "Allow new users to sign up" is verified disabled in Supabase dashboard settings after the owner account is created.
 
 ---
 
@@ -59,18 +60,18 @@
 
 - **Goal**: Ingest public ATS job board feeds and manual submissions, sanitize descriptions, and strictly filter by role and location using a centralized configuration file with comprehensive unit tests.
 - **Tasks**:
-  - [ ] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with RLS policies scoped to `auth.uid()`. The `jobs` table schema must include:
+  - [x] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with RLS policies scoped to `auth.uid()`. The `jobs` table schema must include:
     - `score_status`: `text` (default `'pending'`, constrained to `'pending' | 'scored' | 'scoring failed'`)
     - `fit_score`: `integer` (nullable)
     - `match_analysis`: `jsonb` (nullable)
     - `scored_at`: `timestamptz` (nullable)
-  - [ ] Create centralized filter config in `src/config/filters.ts` with:
+  - [x] Create centralized filter config in `src/config/filters.ts` with:
     - Whole-word regex matching for location and title tokens.
     - Case-sensitive uppercase `IN` token matcher (`\bIN\b`) vs case-insensitive other tokens.
     - Product role inclusion list (`Product Manager`, `APM`, `Associate Product`, `Product Owner`, `Product Analyst`).
     - Seniority exclusion list (`Director`, `Head of`, `VP`, `Principal`, `Group Product`, `Staff`).
     - Remote eligibility logic: India/APAC paired OR standalone country-less Remote (with `"Check eligibility"` badge flag), rejecting other regions (`US`, `EU`, etc.).
-  - [ ] Implement unit test suite (Jest/Vitest) for `src/config/filters.ts` testing all mandated cases:
+  - [x] Implement unit test suite (Vitest) for `src/config/filters.ts` testing all mandated cases:
     - `"Bengaluru, IN"` (PASS)
     - `"Singapore"` (FAIL)
     - `"Hybrid in London"` (FAIL)
@@ -79,25 +80,25 @@
     - `"Hybrid - Gurugram"` (PASS)
     - `"Director of Product"` (FAIL)
     - `"Associate Product Manager"` (PASS)
-  - [ ] Build HTML sanitization helper to strip tags and extra whitespace from job descriptions before DB storage.
-  - [ ] Build ATS Feed fetchers (`src/lib/ats/greenhouse.ts`, `lever.ts`, `ashby.ts`):
+  - [x] Build HTML sanitization helper to strip tags and extra whitespace from job descriptions before DB storage.
+  - [x] Build ATS Feed fetchers (`src/lib/ats/greenhouse.ts`, `lever.ts`, `ashby.ts`):
     - Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{company}/jobs?content=true`
     - Lever: `https://api.lever.co/v0/postings/{company}?mode=json`
     - Ashby: `https://api.ashbyhq.com/posting-api/job-board/{company}`
-  - [ ] Implement URL deduplication logic before inserting new jobs into Supabase.
-  - [ ] Build "Companies" management UI:
+  - [x] Implement URL deduplication logic before inserting new jobs into Supabase.
+  - [x] Build "Companies" management UI:
     - Add, edit, delete company slugs and board types (`greenhouse` | `lever` | `ashby`).
     - "Fetch Jobs" trigger button executing ingestion and filtering pipeline.
-  - [ ] Build "Paste a Job" manual submission form (Title, Company, Location, Job URL, Job Description) running through the same sanitizer and filters.
+  - [x] Build "Paste a Job" manual submission form (Title, Company, Location, Job URL, Job Description) running through the same sanitizer and filters.
 - **Files Likely Touched**:
   - `supabase/migrations/02_companies_and_jobs.sql`
   - `src/config/filters.ts`
   - `src/config/__tests__/filters.test.ts`
-  - `src/lib/ats/greenhouse.ts`, `src/lib/ats/lever.ts`, `src/lib/ats/ashby.ts`, `src/lib/ats/index.ts`
+  - `src/lib/ats/greenhouse.ts`, `src/lib/ats/lever.ts`, `src/lib/ats/ashby.ts`, `src/lib/ats/types.ts`, `src/lib/ats/fetcher.ts`
   - `src/lib/sanitize.ts`
   - `src/app/companies/page.tsx`, `src/app/companies/actions.ts`
-  - `src/app/jobs/paste/page.tsx`, `src/app/jobs/actions.ts`
-  - `src/components/JobCard.tsx`, `src/components/EligibilityBadge.tsx`
+  - `src/app/jobs/page.tsx`, `src/app/jobs/paste/page.tsx`, `src/app/jobs/actions.ts`
+  - `src/components/CompanyManager.tsx`, `src/components/JobsList.tsx`, `src/components/EligibilityBadge.tsx`, `src/components/ScoreStatusBadge.tsx`
 - **"Done When" Test Criteria**:
   1. `npm test` runs and passes all 8+ required filter unit test scenarios without failures.
   2. Adding a test company (e.g. Greenhouse/Lever/Ashby slug) and clicking "Fetch Jobs" imports only matching Product roles in India/Remote.

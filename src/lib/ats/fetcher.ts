@@ -1,0 +1,112 @@
+import { CompanyRecord, IngestionMetrics, RawJobPosting } from './types';
+import { fetchGreenhouseJobs } from './greenhouse';
+import { fetchLeverJobs } from './lever';
+import { fetchAshbyJobs } from './ashby';
+import { evaluateJobFilter } from '@/config/filters';
+import { sanitizeHtml } from '@/lib/sanitize';
+import { createClient } from '@/lib/supabase/server';
+
+export async function fetchRawJobsForCompany(company: CompanyRecord): Promise<RawJobPosting[]> {
+  switch (company.board_type) {
+    case 'greenhouse':
+      return await fetchGreenhouseJobs(company.slug, company.name);
+    case 'lever':
+      return await fetchLeverJobs(company.slug, company.name);
+    case 'ashby':
+      return await fetchAshbyJobs(company.slug, company.name);
+    default:
+      throw new Error(`Unsupported board type: ${company.board_type}`);
+  }
+}
+
+export async function ingestJobsForCompany(
+  company: CompanyRecord,
+  userId: string
+): Promise<IngestionMetrics> {
+  const metrics: IngestionMetrics = {
+    companyName: company.name,
+    companySlug: company.slug,
+    boardType: company.board_type,
+    totalFetched: 0,
+    passedFilter: 0,
+    newInserted: 0,
+    duplicatesCount: 0,
+  };
+
+  try {
+    // 1. Fetch raw jobs
+    const rawJobs = await fetchRawJobsForCompany(company);
+    metrics.totalFetched = rawJobs.length;
+
+    if (rawJobs.length === 0) {
+      return metrics;
+    }
+
+    // 2. Filter jobs according to title and location rules
+    const filteredJobs = rawJobs
+      .map((job) => {
+        const filterResult = evaluateJobFilter(job.title, job.location);
+        return {
+          ...job,
+          filterResult,
+        };
+      })
+      .filter((item) => item.filterResult.passed && item.url);
+
+    metrics.passedFilter = filteredJobs.length;
+
+    if (filteredJobs.length === 0) {
+      return metrics;
+    }
+
+    const supabase = await createClient();
+
+    // 3. Query existing job URLs for deduplication
+    const candidateUrls = filteredJobs.map((j) => j.url);
+    const { data: existingRows } = await supabase
+      .from('jobs')
+      .select('job_url')
+      .eq('user_id', userId)
+      .in('job_url', candidateUrls);
+
+    const existingUrlSet = new Set((existingRows || []).map((r: { job_url: string }) => r.job_url));
+
+    const newJobsToInsert = filteredJobs.filter(
+      (job) => !existingUrlSet.has(job.url)
+    );
+
+    metrics.duplicatesCount = filteredJobs.length - newJobsToInsert.length;
+
+    if (newJobsToInsert.length === 0) {
+      return metrics;
+    }
+
+    // 4. Sanitize descriptions and prepare rows for bulk insert
+    const insertPayload = newJobsToInsert.map((job) => ({
+      user_id: userId,
+      company_id: company.id,
+      title: job.title.trim(),
+      company_name: company.name,
+      location: job.location.trim(),
+      job_url: job.url.trim(),
+      description: sanitizeHtml(job.rawDescription),
+      source: 'feed',
+      needs_eligibility_check: job.filterResult.needsEligibilityCheck,
+      score_status: 'pending',
+    }));
+
+    const { error: insertError } = await supabase
+      .from('jobs')
+      .insert(insertPayload);
+
+    if (insertError) {
+      throw new Error(`Database insert error: ${insertError.message}`);
+    }
+
+    metrics.newInserted = newJobsToInsert.length;
+    return metrics;
+  } catch (err: any) {
+    metrics.error = err?.message || 'Unknown ingestion error';
+    return metrics;
+  }
+}

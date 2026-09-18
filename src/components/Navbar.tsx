@@ -16,6 +16,15 @@ export async function Navbar() {
         <nav className="nav-links">
           {user && isAuthorized ? (
             <>
+              <Link href="/jobs" className="nav-link">
+                Jobs
+              </Link>
+              <Link href="/companies" className="nav-link">
+                Companies
+              </Link>
+              <Link href="/jobs/paste" className="nav-link">
+                + Paste Job
+              </Link>
               <Link href="/profile" className="nav-link">
                 My Profile
               </Link>
