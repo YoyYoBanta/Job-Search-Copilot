@@ -7,6 +7,7 @@ import { EligibilityBadge } from '@/components/EligibilityBadge';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
 import { SeniorityBadge } from '@/components/SeniorityBadge';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
+import { OutreachModal } from '@/components/OutreachModal';
 import { formatShortModelName } from '@/lib/groq/config';
 import Link from 'next/link';
 
@@ -35,6 +36,9 @@ export interface JobRecord {
   seniority_match: 'under' | 'fit' | 'over' | string | null;
   scored_model: string | null;
   scored_at: string | null;
+  cover_note?: string | null;
+  referral_message?: string | null;
+  outreach_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +77,42 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
   useEffect(() => {
     setJobs(initialJobs);
   }, [initialJobs]);
+
+  // Outreach Modal state (Phase 4)
+  const [outreachJob, setOutreachJob] = useState<JobRecord | null>(null);
+  const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
+
+  const handleOutreachUpdated = (
+    jobId: string,
+    coverNote: string,
+    referralMessage: string,
+    outreachUpdatedAt: string
+  ) => {
+    setJobs((prev) =>
+      prev.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              cover_note: coverNote,
+              referral_message: referralMessage,
+              outreach_updated_at: outreachUpdatedAt,
+            }
+          : j
+      )
+    );
+    if (outreachJob && outreachJob.id === jobId) {
+      setOutreachJob((prev) =>
+        prev
+          ? {
+              ...prev,
+              cover_note: coverNote,
+              referral_message: referralMessage,
+              outreach_updated_at: outreachUpdatedAt,
+            }
+          : null
+      );
+    }
+  };
 
   // Queue state
   const [isScoringQueueRunning, setIsScoringQueueRunning] = useState(false);
@@ -712,6 +752,25 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                             {isScoringThis ? 'Scoring...' : '🔄 Re-score'}
                           </button>
                         )}
+                        {job.score_status === 'scored' && job.seniority_match === 'fit' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOutreachJob(job);
+                              setIsOutreachModalOpen(true);
+                            }}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '0.375rem 0.65rem',
+                              fontSize: '0.75rem',
+                              borderColor: job.cover_note ? 'rgba(99, 102, 241, 0.4)' : undefined,
+                              color: job.cover_note ? '#818cf8' : undefined,
+                            }}
+                            title="Draft tailored cover note and LinkedIn referral message"
+                          >
+                            {job.cover_note ? '✍️ View Outreach' : '✍️ Draft Outreach'}
+                          </button>
+                        )}
                       </>
                     )}
 
@@ -879,6 +938,14 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
           })}
         </div>
       )}
+
+      {/* Tailored Outreach Modal (Phase 4) */}
+      <OutreachModal
+        job={outreachJob}
+        isOpen={isOutreachModalOpen}
+        onClose={() => setIsOutreachModalOpen(false)}
+        onUpdate={handleOutreachUpdated}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 3 Code Complete — Ready for Migration 03 & Verification
+**Current Status:** Phase 3 Verified & Closed — Phase 4 Planning
 
 ---
 
@@ -120,7 +120,7 @@
 ## Phase 3 — AI Matcher: Seniority Context, Anti-Fabrication Bullet Verification, Dynamic Groq Pacing, Single-Job Endpoint, Client Queue & Feedback
 
 - **Goal**: Score candidate-job fit using Groq LLM with a client-driven queue calling a single-job server endpoint (avoiding Vercel serverless execution limits), with dynamic header-based rate-limit pacing, Groq 70B/8B model fallback, verbatim resume bullet validation, and user feedback ratings.
-- **Status**: [ ] Code Complete — Ready for Migration 03 & Verification
+- **Status**: [x] Verified on Vercel Preview (All 8 criteria passed)
 - **Tasks**:
   - [x] Create `supabase/migrations/03_scoring.sql` defining:
     - `profiles`: `total_years_experience` (numeric), `pm_years_experience` (numeric), `target_roles` (text[])
@@ -161,22 +161,22 @@
     - Schema validation and JSON extractor (`src/lib/groq/__tests__/schema.test.ts`)
 - **Files Touched**:
   - `package.json`
-  - `supabase/migrations/03_scoring.sql`
+  - `supabase/migrations/03_scoring.sql`, `supabase/migrations/04_score_error.sql`
   - `src/lib/groq/config.ts`, `src/lib/groq/schema.ts`, `src/lib/groq/client.ts`, `src/lib/groq/__tests__/schema.test.ts`
   - `src/lib/matcher/prompts.ts`, `src/lib/matcher/bulletChecker.ts`, `src/lib/matcher/__tests__/seniority.test.ts`, `src/lib/matcher/__tests__/bulletChecker.test.ts`
   - `src/app/api/score/job/route.ts`
   - `src/app/jobs/actions.ts`, `src/app/jobs/page.tsx`
   - `src/app/profile/actions.ts`, `src/app/profile/page.tsx`
-  - `src/components/ResumeEditor.tsx`, `src/components/JobsList.tsx`, `src/components/SeniorityBadge.tsx`, `src/components/FeedbackButtons.tsx`
+  - `src/components/ResumeEditor.tsx`, `src/components/JobsList.tsx`, `src/components/SeniorityBadge.tsx`, `src/components/FeedbackButtons.tsx`, `src/components/ScoreStatusBadge.tsx`
 - **"Done When" Test Criteria**:
-  1. [ ] Triggering batch scoring executes single-job requests sequentially driven by the client UI, displaying progress.
-  2. [ ] Closing the browser tab and reopening allows resuming scoring from remaining `pending` jobs without duplicates.
-  3. [ ] Server endpoint execution completes well within Vercel timeout limits since only 1 job is processed per request.
-  4. [ ] Per-job HTTP 429 responses back off and retry automatically without crashing the client queue.
-  5. [ ] Successfully scored job displays fit score (0-100), top 3 reasons, gaps, recommended verbatim bullets, model badge, and seniority match badge.
-  6. [ ] Seniority rules accurately identify APM as "fit", "8+ years PM" as "over", and internships as "under".
-  7. [ ] Recommended bullets only contain lines verified from candidate resume.
-  8. [ ] Clicking thumbs up / thumbs down updates user feedback rating in the database.
+  1. [x] Triggering batch scoring executes single-job requests sequentially driven by the client UI, displaying progress.
+  2. [x] Closing the browser tab and reopening allows resuming scoring from remaining `pending` jobs without duplicates.
+  3. [x] Server endpoint execution completes well within Vercel timeout limits since only 1 job is processed per request.
+  4. [x] Per-job HTTP 429 responses back off and retry automatically without crashing the client queue.
+  5. [x] Successfully scored job displays fit score (0-100), top 3 reasons, gaps, recommended verbatim bullets, model badge, and seniority match badge.
+  6. [x] Seniority rules accurately identify APM as "fit", "8+ years PM" as "over", and internships as "under".
+  7. [x] Recommended bullets only contain lines verified from candidate resume.
+  8. [x] Clicking thumbs up / thumbs down updates user feedback rating in the database.
 
 
 ---

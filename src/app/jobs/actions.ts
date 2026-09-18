@@ -335,3 +335,145 @@ export async function recleanJobDescriptionsAction(): Promise<{
 
 // Alias for backwards compatibility
 export const deleteJobAction = dismissJobAction;
+
+/**
+ * Generates tailored cover note and LinkedIn referral message for a seniority-fit job.
+ */
+export async function generateOutreachAction(
+  jobId: string,
+  forceRegenerate: boolean = false
+): Promise<{
+  success: boolean;
+  cover_note?: string;
+  referral_message?: string;
+  outreach_updated_at?: string;
+  cached?: boolean;
+  error?: string;
+}> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // 1. Fetch job record
+    const { data: job, error: jobErr } = await supabase
+      .from('jobs')
+      .select('id, title, company_name, location, description, match_analysis, score_status, seniority_match, cover_note, referral_message, outreach_updated_at')
+      .eq('id', jobId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (jobErr || !job) {
+      return { success: false, error: jobErr?.message || 'Job not found.' };
+    }
+
+    if (job.score_status !== 'scored') {
+      return { success: false, error: 'Job must be scored before generating tailored outreach.' };
+    }
+
+    if (job.seniority_match !== 'fit') {
+      return { success: false, error: 'Tailored outreach is only available for jobs with seniority Fit.' };
+    }
+
+    // 2. Return cached drafts if already generated and not forced
+    if (!forceRegenerate && job.cover_note && job.referral_message) {
+      return {
+        success: true,
+        cover_note: job.cover_note,
+        referral_message: job.referral_message,
+        outreach_updated_at: job.outreach_updated_at || undefined,
+        cached: true,
+      };
+    }
+
+    // 3. Fetch user profile
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('resume_text, total_years_experience, pm_years_experience, target_roles')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile || !profile.resume_text?.trim()) {
+      return { success: false, error: 'Please add your resume in My Profile before generating outreach.' };
+    }
+
+    // 4. Call Tailor LLM Generator
+    const { generateTailoredOutreach } = await import('@/lib/tailor/generator');
+    const result = await generateTailoredOutreach({
+      resumeText: profile.resume_text,
+      totalYearsExperience: profile.total_years_experience,
+      pmYearsExperience: profile.pm_years_experience,
+      targetRoles: profile.target_roles,
+      candidateEmail: user.email,
+      jobTitle: job.title,
+      companyName: job.company_name,
+      jobLocation: job.location,
+      jobDescription: job.description,
+      matchAnalysis: job.match_analysis,
+    });
+
+    const nowIso = new Date().toISOString();
+
+    // 5. Persist generated outreach to database
+    const { error: updateErr } = await supabase
+      .from('jobs')
+      .update({
+        cover_note: result.data.cover_note,
+        referral_message: result.data.referral_message,
+        outreach_updated_at: nowIso,
+      })
+      .eq('id', jobId)
+      .eq('user_id', user.id);
+
+    if (updateErr) {
+      return { success: false, error: `Failed to save generated outreach: ${updateErr.message}` };
+    }
+
+    revalidatePath('/jobs');
+
+    return {
+      success: true,
+      cover_note: result.data.cover_note,
+      referral_message: result.data.referral_message,
+      outreach_updated_at: nowIso,
+      cached: false,
+    };
+  } catch (err: any) {
+    console.error('[generateOutreachAction error]:', err);
+    return { success: false, error: err?.message || 'Failed to generate tailored outreach.' };
+  }
+}
+
+/**
+ * Saves user edits to a job's cover note and referral message.
+ */
+export async function saveOutreachDraftAction(
+  jobId: string,
+  coverNote: string,
+  referralMessage: string
+): Promise<{ success: boolean; error?: string; outreach_updated_at?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase
+      .from('jobs')
+      .update({
+        cover_note: coverNote,
+        referral_message: referralMessage,
+        outreach_updated_at: nowIso,
+      })
+      .eq('id', jobId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/jobs');
+    return { success: true, outreach_updated_at: nowIso };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save outreach draft.' };
+  }
+}
+

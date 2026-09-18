@@ -35,7 +35,7 @@ export default async function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span className="badge badge-emerald">Phase 3 Active</span>
+              <span className="badge badge-emerald">Phase 4 Active</span>
               <span className="badge badge-amber">Single-User</span>
             </div>
             <h1 className="card-title" style={{ fontSize: '1.75rem' }}>
