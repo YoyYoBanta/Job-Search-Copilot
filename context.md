@@ -162,6 +162,7 @@ Store all sensitive secrets and configuration in `.env.local` and maintain a doc
 ## 8. Environment Constraint
 
 - **No Local Commands**: `npm`, `node`, `next`, and similar commands CANNOT be run on the developer's local machine. Never instruct the user to run them locally and never mark a task "verified" based on a local run.
+- **Dependencies & Lockfile**: Dependencies are added by editing `package.json` only. `package-lock.json` may be out of date; CI and Vercel run `npm install`.
 - **Vercel Previews & CI**: Builds and previews run on Vercel (preview deployment per push to GitHub). Build errors are read from Vercel's deployment logs.
 - **Automated Testing**: Tests (`npm test`) and type checks run in GitHub Actions on every push.
 - **Two-State Phase Completion**: Every phase has two distinct states:

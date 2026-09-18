@@ -10,7 +10,20 @@ export async function middleware(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const allowedEmail = (process.env.ALLOWED_EMAIL || '').trim().toLowerCase();
 
+  const path = request.nextUrl.pathname;
+  const isPublicRoute =
+    path === '/login' ||
+    path === '/unauthorized' ||
+    path.startsWith('/_next') ||
+    path.startsWith('/api/auth');
+
+  // Fail CLOSED if Supabase configuration is missing: block all non-public routes
   if (!supabaseUrl || !supabaseAnonKey) {
+    if (!isPublicRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
     return supabaseResponse;
   }
 
@@ -32,13 +45,6 @@ export async function middleware(request: NextRequest) {
       },
     },
   });
-
-  const path = request.nextUrl.pathname;
-  const isPublicRoute =
-    path === '/login' ||
-    path === '/unauthorized' ||
-    path.startsWith('/_next') ||
-    path.startsWith('/api/auth');
 
   // Refresh auth token
   const {
