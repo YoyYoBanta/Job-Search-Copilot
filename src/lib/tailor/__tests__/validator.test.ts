@@ -65,6 +65,15 @@ describe('Tailor Validator & Schema Tests', () => {
       const cliches = findCliches(cleanText);
       expect(cliches).toEqual([]);
     });
+
+    it('does not flag words containing substrings like "Slack", "black", or "blacklist"', () => {
+      const text = 'Built a Slack-to-WhatsApp workflow';
+      const cliches = findCliches(text);
+      expect(cliches).toEqual([]);
+
+      const blackText = 'Managed black box testing and updated the blacklist policy.';
+      expect(findCliches(blackText)).toEqual([]);
+    });
   });
 
   describe('Length Bound Enforcement Tests (Requirement 4)', () => {

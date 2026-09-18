@@ -32,15 +32,21 @@ export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Detects presence of forbidden corporate clichés and gap/shortcoming phrases.
+ * Detects presence of forbidden corporate clichés and gap/shortcoming phrases
+ * using whole-word, case-insensitive regex boundary matching.
  */
 export function findCliches(text: string): string[] {
   if (!text) return [];
-  const lower = text.toLowerCase();
   const found: string[] = [];
   for (const cliche of FORBIDDEN_CLICHES) {
-    if (lower.includes(cliche.toLowerCase())) {
+    const escaped = escapeRegExp(cliche);
+    const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (regex.test(text)) {
       found.push(cliche);
     }
   }
