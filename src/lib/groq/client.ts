@@ -151,8 +151,9 @@ export async function requestGroqFitScore(
     console.error('[Groq JSON Parse/Validation Attempt 1 Failed]:', firstParseError.message, 'Raw LLM Content:', rawContent);
 
     // Attempt 2: Retry once with a corrective JSON prompt
+    let correctiveRes: { content: string; rateLimits: GroqRateLimitInfo } | undefined;
     try {
-      const correctiveRes = await callGroqChat(
+      correctiveRes = await callGroqChat(
         activeModel,
         [
           { role: 'system', content: systemMessage },
