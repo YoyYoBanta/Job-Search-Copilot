@@ -6,6 +6,18 @@ import { evaluateJobFilter } from '@/config/filters';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { createClient } from '@/lib/supabase/server';
 
+export function filterNewCandidateJobs<T extends { url: string }>(
+  candidateJobs: T[],
+  existingUrlsInDatabase: string[]
+): { newJobs: T[]; duplicatesCount: number } {
+  const existingUrlSet = new Set(existingUrlsInDatabase.map((u) => u.trim()));
+  const newJobs = candidateJobs.filter((job) => !existingUrlSet.has(job.url.trim()));
+  return {
+    newJobs,
+    duplicatesCount: candidateJobs.length - newJobs.length,
+  };
+}
+
 export async function fetchRawJobsForCompany(company: CompanyRecord): Promise<RawJobPosting[]> {
   switch (company.board_type) {
     case 'greenhouse':
@@ -62,6 +74,7 @@ export async function ingestJobsForCompany(
     const supabase = await createClient();
 
     // 3. Query existing job URLs for deduplication
+    // Note: Do NOT filter by dismissed; dismissed jobs remain in DB and must not be re-imported
     const candidateUrls = filteredJobs.map((j) => j.url);
     const { data: existingRows } = await supabase
       .from('jobs')
@@ -69,13 +82,13 @@ export async function ingestJobsForCompany(
       .eq('user_id', userId)
       .in('job_url', candidateUrls);
 
-    const existingUrlSet = new Set((existingRows || []).map((r: { job_url: string }) => r.job_url));
-
-    const newJobsToInsert = filteredJobs.filter(
-      (job) => !existingUrlSet.has(job.url)
+    const existingUrlsInDb = (existingRows || []).map((r: { job_url: string }) => r.job_url);
+    const { newJobs: newJobsToInsert, duplicatesCount } = filterNewCandidateJobs(
+      filteredJobs,
+      existingUrlsInDb
     );
 
-    metrics.duplicatesCount = filteredJobs.length - newJobsToInsert.length;
+    metrics.duplicatesCount = duplicatesCount;
 
     if (newJobsToInsert.length === 0) {
       return metrics;
@@ -92,6 +105,7 @@ export async function ingestJobsForCompany(
       description: sanitizeHtml(job.rawDescription),
       source: 'feed',
       needs_eligibility_check: job.filterResult.needsEligibilityCheck,
+      dismissed: false,
       score_status: 'pending',
     }));
 

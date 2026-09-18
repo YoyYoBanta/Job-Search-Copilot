@@ -60,8 +60,9 @@
 
 - **Goal**: Ingest public ATS job board feeds and manual submissions, sanitize descriptions, and strictly filter by role and location using a centralized configuration file with comprehensive unit tests.
 - **Tasks**:
-  - [x] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with RLS policies scoped to `auth.uid()`. The `jobs` table schema must include:
-    - `score_status`: `text` (default `'pending'`, constrained to `'pending' | 'scored' | 'scoring failed'`)
+  - [x] Create `supabase/migrations/02_companies_and_jobs.sql` defining `companies` and `jobs` tables with idempotent RLS policies scoped to `auth.uid()`, foreign company ownership checks, and performance indexes. The `jobs` table schema must include:
+    - `dismissed`: `boolean` (default `false`)
+    - `score_status`: `text` (default `'pending'`, constrained to `'pending' | 'scored' | 'failed'`)
     - `fit_score`: `integer` (nullable)
     - `match_analysis`: `jsonb` (nullable)
     - `scored_at`: `timestamptz` (nullable)
@@ -71,7 +72,7 @@
     - Product role inclusion list (`Product Manager`, `APM`, `Associate Product`, `Product Owner`, `Product Analyst`).
     - Seniority exclusion list (`Director`, `Head of`, `VP`, `Principal`, `Group Product`, `Staff`).
     - Remote eligibility logic: India/APAC paired OR standalone country-less Remote (with `"Check eligibility"` badge flag), rejecting other regions (`US`, `EU`, etc.).
-  - [x] Implement unit test suite (Vitest) for `src/config/filters.ts` testing all mandated cases:
+  - [x] Implement unit test suite (Vitest) for `src/config/filters.ts` and `src/lib/ats/fetcher.ts` testing all mandated cases:
     - `"Bengaluru, IN"` (PASS)
     - `"Singapore"` (FAIL)
     - `"Hybrid in London"` (FAIL)
@@ -80,12 +81,13 @@
     - `"Hybrid - Gurugram"` (PASS)
     - `"Director of Product"` (FAIL)
     - `"Associate Product Manager"` (PASS)
+    - Dismissed / existing job URLs are skipped on re-fetch and never re-inserted.
   - [x] Build HTML sanitization helper to strip tags and extra whitespace from job descriptions before DB storage.
   - [x] Build ATS Feed fetchers (`src/lib/ats/greenhouse.ts`, `lever.ts`, `ashby.ts`):
     - Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{company}/jobs?content=true`
     - Lever: `https://api.lever.co/v0/postings/{company}?mode=json`
     - Ashby: `https://api.ashbyhq.com/posting-api/job-board/{company}`
-  - [x] Implement URL deduplication logic before inserting new jobs into Supabase.
+  - [x] Implement URL deduplication logic before inserting new jobs into Supabase (treating dismissed rows as existing).
   - [x] Build "Companies" management UI:
     - Add, edit, delete company slugs and board types (`greenhouse` | `lever` | `ashby`).
     - "Fetch Jobs" trigger button executing ingestion and filtering pipeline.
@@ -95,18 +97,20 @@
   - `src/config/filters.ts`
   - `src/config/__tests__/filters.test.ts`
   - `src/lib/ats/greenhouse.ts`, `src/lib/ats/lever.ts`, `src/lib/ats/ashby.ts`, `src/lib/ats/types.ts`, `src/lib/ats/fetcher.ts`
+  - `src/lib/ats/__tests__/deduplication.test.ts`
   - `src/lib/sanitize.ts`
   - `src/app/companies/page.tsx`, `src/app/companies/actions.ts`
   - `src/app/jobs/page.tsx`, `src/app/jobs/paste/page.tsx`, `src/app/jobs/actions.ts`
   - `src/components/CompanyManager.tsx`, `src/components/JobsList.tsx`, `src/components/EligibilityBadge.tsx`, `src/components/ScoreStatusBadge.tsx`
 - **"Done When" Test Criteria**:
-  1. `npm test` runs and passes all 8+ required filter unit test scenarios without failures.
+  1. `npm test` runs and passes all 11+ required filter and deduplication unit test scenarios without failures.
   2. Adding a test company (e.g. Greenhouse/Lever/Ashby slug) and clicking "Fetch Jobs" imports only matching Product roles in India/Remote.
   3. Newly fetched or pasted jobs have `score_status = 'pending'` in the database.
   4. Non-product roles and excluded senior titles (e.g. "Director of Product", "Software Engineer") are filtered out.
   5. Duplicate job URLs are not inserted twice.
-  6. HTML formatting is stripped clean from descriptions in the database.
-  7. Submitting a manual job via "Paste a Job" stores the job correctly in Supabase.
+  6. Dismissing a job and re-fetching confirms the dismissed job is never re-inserted.
+  7. HTML formatting is stripped clean from descriptions in the database.
+  8. Submitting a manual job via "Paste a Job" stores the job correctly in Supabase.
 
 ---
 

@@ -1,5 +1,5 @@
 interface ScoreStatusBadgeProps {
-  status: 'pending' | 'scored' | 'scoring failed' | string;
+  status: 'pending' | 'scored' | 'failed' | string;
   fitScore?: number | null;
 }
 
@@ -16,7 +16,7 @@ export function ScoreStatusBadge({ status, fitScore }: ScoreStatusBadgeProps) {
     );
   }
 
-  if (status === 'scoring failed') {
+  if (status === 'failed') {
     return (
       <span className="badge badge-rose">
         Scoring Failed

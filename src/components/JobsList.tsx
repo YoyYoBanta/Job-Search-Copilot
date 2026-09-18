@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { deleteJobAction } from '@/app/jobs/actions';
+import { dismissJobAction, restoreJobAction } from '@/app/jobs/actions';
 import { LocalTime } from '@/components/LocalTime';
 import { EligibilityBadge } from '@/components/EligibilityBadge';
 import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
@@ -18,7 +18,8 @@ export interface JobRecord {
   description: string;
   source: 'feed' | 'manual';
   needs_eligibility_check: boolean;
-  score_status: 'pending' | 'scored' | 'scoring failed';
+  dismissed: boolean;
+  score_status: 'pending' | 'scored' | 'failed';
   fit_score: number | null;
   match_analysis: any;
   seniority_match: string | null;
@@ -33,9 +34,18 @@ interface JobsListProps {
 
 export function JobsList({ initialJobs }: JobsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDismissed, setShowDismissed] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobRecord | null>(null);
 
+  const totalDismissed = initialJobs.filter((j) => j.dismissed).length;
+  const activeJobsCount = initialJobs.length - totalDismissed;
+
   const filteredJobs = initialJobs.filter((job) => {
+    // Hide dismissed jobs by default unless toggle is checked
+    if (!showDismissed && job.dismissed) {
+      return false;
+    }
+
     const q = searchTerm.toLowerCase();
     return (
       job.title.toLowerCase().includes(q) ||
@@ -51,7 +61,12 @@ export function JobsList({ initialJobs }: JobsListProps) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
             <h1 className="card-title">Ingested Jobs</h1>
-            <span className="badge badge-emerald">{initialJobs.length} Total</span>
+            <span className="badge badge-emerald">{activeJobsCount} Active</span>
+            {totalDismissed > 0 && (
+              <span className="badge" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
+                {totalDismissed} Dismissed
+              </span>
+            )}
           </div>
           <p className="card-desc">
             Product roles filtered for India or eligible Remote. All newly fetched or pasted jobs start with <code>score_status = 'pending'</code>.
@@ -68,16 +83,26 @@ export function JobsList({ initialJobs }: JobsListProps) {
         </div>
       </div>
 
-      {/* Search Filter Bar */}
-      <div style={{ display: 'flex', gap: '1rem' }}>
+      {/* Search & Filter Toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <input
           type="text"
           className="input"
           placeholder="Search jobs by title, company, or city..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ maxWidth: '450px' }}
+          style={{ maxWidth: '420px' }}
         />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={showDismissed}
+            onChange={(e) => setShowDismissed(e.target.checked)}
+            style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)', cursor: 'pointer' }}
+          />
+          <span>Show dismissed jobs ({totalDismissed})</span>
+        </label>
       </div>
 
       {/* Jobs Table / Cards */}
@@ -87,6 +112,8 @@ export function JobsList({ initialJobs }: JobsListProps) {
           <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
             {initialJobs.length === 0
               ? 'Fetch job boards under Companies or manually paste a job description.'
+              : totalDismissed > 0 && !showDismissed
+              ? 'All matching jobs might be dismissed. Enable "Show dismissed jobs" above.'
               : 'Try adjusting your search query.'}
           </p>
         </div>
@@ -103,6 +130,8 @@ export function JobsList({ initialJobs }: JobsListProps) {
                 flexWrap: 'wrap',
                 gap: '1.25rem',
                 padding: '1.25rem 1.5rem',
+                opacity: job.dismissed ? 0.6 : 1,
+                borderStyle: job.dismissed ? 'dashed' : 'solid',
               }}
             >
               <div style={{ flex: 1, minWidth: '280px' }}>
@@ -112,6 +141,11 @@ export function JobsList({ initialJobs }: JobsListProps) {
                   </h3>
                   <ScoreStatusBadge status={job.score_status} fitScore={job.fit_score} />
                   {job.needs_eligibility_check && <EligibilityBadge />}
+                  {job.dismissed && (
+                    <span className="badge badge-rose" style={{ fontSize: '0.6875rem' }}>
+                      Dismissed
+                    </span>
+                  )}
                   <span className="badge" style={{ backgroundColor: 'var(--bg-tertiary)', fontSize: '0.6875rem' }}>
                     {job.source === 'feed' ? 'ATS Feed' : 'Manual Paste'}
                   </span>
@@ -166,17 +200,31 @@ export function JobsList({ initialJobs }: JobsListProps) {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <form action={deleteJobAction}>
-                  <input type="hidden" name="job_id" value={job.id} />
-                  <button
-                    type="submit"
-                    className="btn btn-danger"
-                    style={{ padding: '0.375rem 0.625rem', fontSize: '0.75rem' }}
-                    title="Delete Job"
-                  >
-                    ✕
-                  </button>
-                </form>
+                {job.dismissed ? (
+                  <form action={restoreJobAction}>
+                    <input type="hidden" name="job_id" value={job.id} />
+                    <button
+                      type="submit"
+                      className="btn btn-secondary"
+                      style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                      title="Restore Job to Active List"
+                    >
+                      Restore
+                    </button>
+                  </form>
+                ) : (
+                  <form action={dismissJobAction}>
+                    <input type="hidden" name="job_id" value={job.id} />
+                    <button
+                      type="submit"
+                      className="btn btn-danger"
+                      style={{ padding: '0.375rem 0.625rem', fontSize: '0.75rem' }}
+                      title="Dismiss Job"
+                    >
+                      ✕ Dismiss
+                    </button>
+                  </form>
+                )}
               </div>
             </div>
           ))}

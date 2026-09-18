@@ -116,7 +116,8 @@ Stores filtered job postings imported from ATS feeds or manually pasted.
 | `description` | `TEXT` | `NOT NULL` | Sanitized HTML-stripped description |
 | `source` | `TEXT` | `NOT NULL DEFAULT 'feed' CHECK (source IN ('feed', 'manual'))` | Origin source |
 | `needs_eligibility_check` | `BOOLEAN` | `NOT NULL DEFAULT false` | True for country-less general remote roles |
-| `score_status` | `TEXT` | `NOT NULL DEFAULT 'pending' CHECK (score_status IN ('pending', 'scored', 'scoring failed'))` | AI scoring state |
+| `dismissed` | `BOOLEAN` | `NOT NULL DEFAULT false` | Soft-deleted / dismissed job state |
+| `score_status` | `TEXT` | `NOT NULL DEFAULT 'pending' CHECK (score_status IN ('pending', 'scored', 'failed'))` | AI scoring state |
 | `fit_score` | `INTEGER` | `NULL` | Fit score (0-100) from Phase 3 |
 | `match_analysis` | `JSONB` | `NULL` | Top reasons, gaps, bullets from Phase 3 |
 | `seniority_match` | `TEXT` | `NULL CHECK (seniority_match IN ('under', 'fit', 'over'))` | Seniority classification |
@@ -125,9 +126,11 @@ Stores filtered job postings imported from ATS feeds or manually pasted.
 | `updated_at` | `TIMESTAMPTZ`| `NOT NULL DEFAULT now()` | Auto-updated on record changes |
 
 *Unique constraint*: `UNIQUE (user_id, job_url)`.
+*Indexes*: `jobs(user_id, created_at DESC)`, `jobs(company_id)`, `companies(user_id)`.
 
 ### Row Level Security (RLS) Policies
-- All tables (`profiles`, `companies`, `jobs`) have RLS enabled with policies strictly scoped to `auth.uid() = user_id` across `SELECT`, `INSERT`, `UPDATE`, and `DELETE`.
+- All tables (`profiles`, `companies`, `jobs`) have RLS enabled with idempotent policies strictly scoped to `auth.uid() = user_id` across `SELECT`, `INSERT`, `UPDATE`, and `DELETE`.
+- `jobs` INSERT/UPDATE policies enforce that `company_id`, when non-null, references a company owned by the same authenticated user.
 - Triggers on `companies` and `jobs` invoke `public.handle_updated_at()` before update.
 
 ---

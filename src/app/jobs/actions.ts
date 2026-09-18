@@ -40,15 +40,18 @@ export async function pasteJobAction(
     const cleanDescription = sanitizeHtml(rawDescription);
     const supabase = await createClient();
 
-    // Check for existing duplicate job URL
+    // Check for existing duplicate job URL (including dismissed jobs)
     const { data: existing } = await supabase
       .from('jobs')
-      .select('id')
+      .select('id, dismissed')
       .eq('user_id', user.id)
       .eq('job_url', jobUrl)
       .maybeSingle();
 
     if (existing) {
+      if (existing.dismissed) {
+        return { error: `This job URL was previously saved and dismissed.` };
+      }
       return { error: `This job URL has already been imported/saved.` };
     }
 
@@ -61,6 +64,7 @@ export async function pasteJobAction(
       description: cleanDescription,
       source: 'manual',
       needs_eligibility_check: filterResult.needsEligibilityCheck,
+      dismissed: false,
       score_status: 'pending',
     });
 
@@ -86,7 +90,7 @@ export async function pasteJobAction(
   }
 }
 
-export async function deleteJobAction(formData: FormData) {
+export async function dismissJobAction(formData: FormData) {
   try {
     const user = await requireAuth();
     const jobId = formData.get('job_id') as string;
@@ -96,12 +100,35 @@ export async function deleteJobAction(formData: FormData) {
     const supabase = await createClient();
     await supabase
       .from('jobs')
-      .delete()
+      .update({ dismissed: true })
       .eq('id', jobId)
       .eq('user_id', user.id);
 
     revalidatePath('/jobs');
   } catch (err) {
-    console.error('Error deleting job:', err);
+    console.error('Error dismissing job:', err);
   }
 }
+
+export async function restoreJobAction(formData: FormData) {
+  try {
+    const user = await requireAuth();
+    const jobId = formData.get('job_id') as string;
+
+    if (!jobId) return;
+
+    const supabase = await createClient();
+    await supabase
+      .from('jobs')
+      .update({ dismissed: false })
+      .eq('id', jobId)
+      .eq('user_id', user.id);
+
+    revalidatePath('/jobs');
+  } catch (err) {
+    console.error('Error restoring job:', err);
+  }
+}
+
+// Alias for backwards compatibility
+export const deleteJobAction = dismissJobAction;
