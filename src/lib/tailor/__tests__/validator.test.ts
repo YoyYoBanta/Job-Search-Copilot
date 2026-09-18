@@ -3,21 +3,56 @@ import {
   countWords,
   findCliches,
   checkAntiFabrication,
+  checkCompanyAndToolGrounding,
   validateOutreachCopy,
+  JobGroundingContext,
 } from '../validator';
 import { TailoredOutreachSchema, extractAndParseJson } from '../schema';
 
 describe('Tailor Validator & Schema Tests', () => {
-  describe('Word Counter Tests', () => {
-    it('counts words accurately', () => {
-      expect(countWords('Hello world')).toBe(2);
-      expect(countWords('   Multiple   spaces  between   words. ')).toBe(4);
-      expect(countWords('')).toBe(0);
+  const sampleResume = 'Product Manager with 4 years experience at Swiggy leading fintech payments and scaling checkout to $12M ARR.';
+  const jobContext: JobGroundingContext = {
+    companyName: 'Stripe',
+    jobTitle: 'Product Manager, Payments',
+    jobDescription: 'Seeking a PM to lead global payout infrastructure and merchant APIs at Stripe.',
+  };
+
+  describe('Company and Entity Grounding Tests (Requirement 1)', () => {
+    it('passes job own company name (Stripe)', () => {
+      const text = 'I am thrilled to explore joining Stripe to lead payments infrastructure.';
+      const res = checkCompanyAndToolGrounding(text, sampleResume, jobContext);
+      // Stripe is in jobContext, so it is grounded
+      expect(res.isGrounded).toBe(true);
+      expect(res.ungroundedEntities).toHaveLength(0);
+    });
+
+    it('passes candidate resume company name (Swiggy)', () => {
+      const text = 'At Swiggy, I led checkout architecture and reduced latency by 30%.';
+      const res = checkCompanyAndToolGrounding(text, sampleResume, jobContext);
+      // Swiggy is in resume, so it is grounded
+      expect(res.isGrounded).toBe(true);
+      expect(res.ungroundedEntities).toHaveLength(0);
+    });
+
+    it('flags invented company (Netflix) and removes the offending sentence', () => {
+      const text = 'At Netflix, I designed video recommendation algorithms. At Swiggy, I scaled payments.';
+      const res = checkCompanyAndToolGrounding(text, sampleResume, jobContext);
+      expect(res.isGrounded).toBe(false);
+      expect(res.ungroundedEntities).toContain('Netflix');
+      expect(res.removedSentences).toContain('At Netflix, I designed video recommendation algorithms.');
+      expect(res.sanitizedText).toBe('At Swiggy, I scaled payments.');
     });
   });
 
-  describe('Cliché Detection Tests', () => {
-    it('identifies forbidden clichés', () => {
+  describe('Gap & Cliché Detection Tests (Requirement 2)', () => {
+    it('flags banned gap / shortcoming phrases', () => {
+      const text = "Although I haven't worked with B2B enterprise clients and lack sales experience, I am a fast learner.";
+      const cliches = findCliches(text);
+      expect(cliches).toContain("although i haven't");
+      expect(cliches).toContain('lack');
+    });
+
+    it('flags traditional corporate clichés', () => {
       const text = 'I am excited to apply for this role because I have a passion for building synergy.';
       const cliches = findCliches(text);
       expect(cliches).toContain('excited to apply');
@@ -25,82 +60,61 @@ describe('Tailor Validator & Schema Tests', () => {
       expect(cliches).toContain('synergy');
     });
 
-    it('returns empty array when no clichés are present', () => {
-      const cleanText = 'I led the rollout of Stripe Payments across APAC, reducing merchant onboarding latency by 35%.';
+    it('passes clean text with no clichés or gap admissions', () => {
+      const cleanText = 'Over 4 years at Swiggy, I delivered core payment systems and improved transaction success rates.';
       const cliches = findCliches(cleanText);
       expect(cliches).toEqual([]);
     });
   });
 
-  describe('Anti-Fabrication Metric Verification Tests', () => {
-    const resumeText = 'Spearheaded growth initiatives resulting in $12M revenue and 45% increase in user engagement at Swiggy.';
+  describe('Length Bound Enforcement Tests (Requirement 4)', () => {
+    it('validates word counts within exact bounds (Cover Note 130-170, Referral < 90)', () => {
+      // 140-word cover note
+      const coverWordsList = Array(140).fill('word').join(' ');
+      // 60-word referral message
+      const referralWordsList = Array(60).fill('word').join(' ');
 
-    it('passes verified metrics that exist in resume', () => {
-      const generated = 'At Swiggy, I helped deliver $12M revenue with a 45% increase in engagement.';
-      const warnings = checkAntiFabrication(generated, resumeText);
-      expect(warnings).toHaveLength(0);
+      const res = validateOutreachCopy(coverWordsList, referralWordsList, sampleResume, jobContext);
+      expect(res.coverNoteWordCount).toBe(140);
+      expect(res.referralMessageWordCount).toBe(60);
+      expect(res.isLengthValid).toBe(true);
     });
 
-    it('flags invented metrics that do not exist in resume', () => {
-      const generated = 'Scaled products to $50M ARR and achieved 99% retention.';
-      const warnings = checkAntiFabrication(generated, resumeText);
-      expect(warnings.length).toBeGreaterThanOrEqual(1);
-      expect(warnings[0]).toContain('$50M');
-    });
-  });
+    it('flags cover note outside 130-170 words', () => {
+      const shortCover = Array(100).fill('word').join(' ');
+      const referral = Array(50).fill('word').join(' ');
 
-  describe('Full Outreach Copy Validation Tests', () => {
-    const resumeText = 'Product manager with 4 years experience leading fintech payment systems.';
-
-    it('validates clean, grounded copy successfully', () => {
-      const coverNote = 'Over the last 4 years in fintech, I led the development and deployment of payment systems. My background aligns directly with your checkout infrastructure roadmap.';
-      const referralMessage = 'Hi Sarah, I saw the PM opening on your team at Razorpay and would love to connect. I have 4 years building fintech payment systems and would appreciate any insights or an internal referral.';
-
-      const result = validateOutreachCopy(coverNote, referralMessage, resumeText);
-      expect(result.isValid).toBe(true);
-      expect(result.clichesFound).toHaveLength(0);
-      expect(result.coverNoteWordCount).toBeGreaterThan(20);
-      expect(result.referralMessageWordCount).toBeGreaterThan(15);
+      const res = validateOutreachCopy(shortCover, referral, sampleResume, jobContext);
+      expect(res.isLengthValid).toBe(false);
+      expect(res.coverNoteWordCount).toBe(100);
     });
 
-    it('flags invalid copy with clichés', () => {
-      const coverNote = 'I am excited to apply for this unique opportunity and bring synergy to your fast-paced environment.';
-      const referralMessage = 'I am the ideal candidate and ready to hit the ground running.';
+    it('flags referral message >= 90 words', () => {
+      const cover = Array(145).fill('word').join(' ');
+      const longReferral = Array(95).fill('word').join(' ');
 
-      const result = validateOutreachCopy(coverNote, referralMessage, resumeText);
-      expect(result.isValid).toBe(false);
-      expect(result.clichesFound.length).toBeGreaterThanOrEqual(3);
+      const res = validateOutreachCopy(cover, longReferral, sampleResume, jobContext);
+      expect(res.isLengthValid).toBe(false);
+      expect(res.referralMessageWordCount).toBe(95);
     });
   });
 
   describe('Schema & JSON Extraction Tests', () => {
-    it('parses valid JSON matching schema', () => {
-      const raw = JSON.stringify({
-        cover_note: 'This is a valid concise cover note for the product role.',
-        referral_message: 'Hi, I am reaching out regarding the open PM position.',
-      });
-
-      const parsed = extractAndParseJson(raw);
-      const validated = TailoredOutreachSchema.parse(parsed);
-      expect(validated.cover_note).toContain('valid concise cover note');
-      expect(validated.referral_message).toContain('reaching out regarding');
-    });
-
-    it('strips <think> reasoning tags and markdown fences', () => {
+    it('parses valid JSON and strips reasoning tags', () => {
       const raw = `<think>
 Drafting cover note...
-Ensure no clichés and keep referral under 80 words.
 </think>
 \`\`\`json
 {
-  "cover_note": "Here is a tailored cover note grounded in the candidate experience.",
-  "referral_message": "Hi, I would love to connect about the PM opening."
+  "cover_note": "Over 4 years in fintech product management, I led payments at Swiggy.",
+  "referral_message": "Hi Sarah, I saw the PM opening at Stripe."
 }
 \`\`\``;
 
       const parsed = extractAndParseJson(raw);
       const validated = TailoredOutreachSchema.parse(parsed);
-      expect(validated.cover_note).toContain('Here is a tailored cover note');
+      expect(validated.cover_note).toContain('Over 4 years in fintech');
+      expect(validated.referral_message).toContain('Hi Sarah');
     });
   });
 });

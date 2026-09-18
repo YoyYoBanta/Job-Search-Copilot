@@ -336,17 +336,27 @@ export async function recleanJobDescriptionsAction(): Promise<{
 // Alias for backwards compatibility
 export const deleteJobAction = dismissJobAction;
 
+export interface GenerateOutreachOptions {
+  forceRegenerate?: boolean;
+  recipientName?: string | null;
+  relationship?: 'cold' | 'alumni' | 'ex-colleague' | 'mutual_connection' | null;
+}
+
 /**
- * Generates tailored cover note and LinkedIn referral message for a seniority-fit job.
+ * Generates tailored cover note and LinkedIn referral message for a job.
  */
 export async function generateOutreachAction(
   jobId: string,
-  forceRegenerate: boolean = false
+  options: GenerateOutreachOptions = {}
 ): Promise<{
   success: boolean;
   cover_note?: string;
   referral_message?: string;
+  last_generated_cover_note?: string;
+  last_generated_referral?: string;
+  outreach_model?: string;
   outreach_updated_at?: string;
+  fabricationWarnings?: string[];
   cached?: boolean;
   error?: string;
 }> {
@@ -357,7 +367,7 @@ export async function generateOutreachAction(
     // 1. Fetch job record
     const { data: job, error: jobErr } = await supabase
       .from('jobs')
-      .select('id, title, company_name, location, description, match_analysis, score_status, seniority_match, cover_note, referral_message, outreach_updated_at')
+      .select('id, title, company_name, location, job_url, description, match_analysis, score_status, seniority_match, cover_note, referral_message, last_generated_cover_note, last_generated_referral, outreach_model, outreach_updated_at')
       .eq('id', jobId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -370,16 +380,15 @@ export async function generateOutreachAction(
       return { success: false, error: 'Job must be scored before generating tailored outreach.' };
     }
 
-    if (job.seniority_match !== 'fit') {
-      return { success: false, error: 'Tailored outreach is only available for jobs with seniority Fit.' };
-    }
-
     // 2. Return cached drafts if already generated and not forced
-    if (!forceRegenerate && job.cover_note && job.referral_message) {
+    if (!options.forceRegenerate && job.cover_note && job.referral_message) {
       return {
         success: true,
         cover_note: job.cover_note,
         referral_message: job.referral_message,
+        last_generated_cover_note: job.last_generated_cover_note || job.cover_note,
+        last_generated_referral: job.last_generated_referral || job.referral_message,
+        outreach_model: job.outreach_model || undefined,
         outreach_updated_at: job.outreach_updated_at || undefined,
         cached: true,
       };
@@ -407,8 +416,11 @@ export async function generateOutreachAction(
       jobTitle: job.title,
       companyName: job.company_name,
       jobLocation: job.location,
+      jobUrl: job.job_url || 'https://company.com/careers',
       jobDescription: job.description,
       matchAnalysis: job.match_analysis,
+      recipientName: options.recipientName,
+      relationship: options.relationship || 'cold',
     });
 
     const nowIso = new Date().toISOString();
@@ -419,6 +431,9 @@ export async function generateOutreachAction(
       .update({
         cover_note: result.data.cover_note,
         referral_message: result.data.referral_message,
+        last_generated_cover_note: result.data.cover_note,
+        last_generated_referral: result.data.referral_message,
+        outreach_model: result.modelUsed,
         outreach_updated_at: nowIso,
       })
       .eq('id', jobId)
@@ -434,7 +449,11 @@ export async function generateOutreachAction(
       success: true,
       cover_note: result.data.cover_note,
       referral_message: result.data.referral_message,
+      last_generated_cover_note: result.data.cover_note,
+      last_generated_referral: result.data.referral_message,
+      outreach_model: result.modelUsed,
       outreach_updated_at: nowIso,
+      fabricationWarnings: result.validation.fabricationWarnings,
       cached: false,
     };
   } catch (err: any) {
@@ -476,4 +495,5 @@ export async function saveOutreachDraftAction(
     return { success: false, error: err?.message || 'Failed to save outreach draft.' };
   }
 }
+
 

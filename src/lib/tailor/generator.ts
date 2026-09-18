@@ -2,7 +2,7 @@ import 'server-only';
 import { getPrimaryGroqModel, getFallbackGroqModel, GROQ_API_URL } from '@/lib/groq/config';
 import { buildTailorSystemPrompt, buildTailorUserPrompt, TailorPromptInputs } from './prompts';
 import { extractAndParseJson, TailoredOutreach, TailoredOutreachSchema } from './schema';
-import { validateOutreachCopy, ValidationResult } from './validator';
+import { validateOutreachCopy, ValidationResult, JobGroundingContext } from './validator';
 
 export interface GenerateOutreachResult {
   data: TailoredOutreach;
@@ -72,6 +72,12 @@ export async function generateTailoredOutreach(
   const systemMessage = buildTailorSystemPrompt();
   const userMessage = buildTailorUserPrompt(inputs);
 
+  const jobContext: JobGroundingContext = {
+    companyName: inputs.companyName,
+    jobTitle: inputs.jobTitle,
+    jobDescription: inputs.jobDescription,
+  };
+
   let activeModel = primaryModel;
   let rawContent: string;
 
@@ -111,45 +117,98 @@ export async function generateTailoredOutreach(
     }
   }
 
-  // Attempt 1: Parse and validate JSON
+  // Attempt 1: Parse and validate
+  let parsedJson: any;
   try {
-    const parsed = extractAndParseJson(rawContent);
-    const validated = TailoredOutreachSchema.parse(parsed);
-    const validation = validateOutreachCopy(
-      validated.cover_note,
-      validated.referral_message,
-      inputs.resumeText
-    );
-    return { data: validated, validation, modelUsed: activeModel };
-  } catch (firstParseError: any) {
-    console.error('[Groq Tailor Parse Attempt 1 Failed]:', firstParseError.message, 'Raw:', rawContent);
+    parsedJson = extractAndParseJson(rawContent);
+  } catch {
+    parsedJson = null;
+  }
 
-    // Attempt 2: Corrective retry
+  let validation: ValidationResult | null = null;
+  if (parsedJson) {
+    const parsed = TailoredOutreachSchema.safeParse(parsedJson);
+    if (parsed.success) {
+      validation = validateOutreachCopy(
+        parsed.data.cover_note,
+        parsed.data.referral_message,
+        inputs.resumeText,
+        jobContext
+      );
+    }
+  }
+
+  // If Attempt 1 failed schema, validation, ungrounded company, or length bounds, retry ONCE with corrective feedback
+  if (!parsedJson || !validation || !validation.isValid) {
+    const issues: string[] = [];
+    if (validation) {
+      if (validation.clichesFound.length > 0) {
+        issues.push(`Remove forbidden phrases: ${validation.clichesFound.join(', ')}`);
+      }
+      if (validation.fabricationWarnings.length > 0) {
+        issues.push(`Ungrounded claims detected: ${validation.fabricationWarnings.join('; ')}`);
+      }
+      if (!validation.isLengthValid) {
+        issues.push(`Length requirement: Cover Note MUST be 130-170 words (currently ${validation.coverNoteWordCount}); Referral DM MUST be under 90 words (currently ${validation.referralMessageWordCount}).`);
+      }
+    } else {
+      issues.push('Output was not valid JSON with keys "cover_note" and "referral_message".');
+    }
+
     try {
+      const correctivePrompt = `Your previous generation had issues:\n- ${issues.join('\n- ')}\n\nRegenerate the Cover Note (130-170 words) and Referral DM (under 90 words, including "${inputs.jobTitle}" and "${inputs.jobUrl}"). Mention ONLY companies/tools present in the resume or JD. Do NOT mention gaps. Output ONLY valid JSON with keys "cover_note" and "referral_message".`;
+
       const retryRes = await callGroqTailorChat(
         activeModel,
         [
           { role: 'system', content: systemMessage },
           { role: 'user', content: userMessage },
           { role: 'assistant', content: rawContent },
-          {
-            role: 'user',
-            content: 'Your previous response was not valid JSON matching the schema. Return ONLY valid JSON with keys "cover_note" (string ~150 words) and "referral_message" (string ~80 words).',
-          },
+          { role: 'user', content: correctivePrompt },
         ],
         apiKey
       );
 
       const secondParsed = extractAndParseJson(retryRes.content);
       const secondValidated = TailoredOutreachSchema.parse(secondParsed);
-      const validation = validateOutreachCopy(
+      const secondValidation = validateOutreachCopy(
         secondValidated.cover_note,
         secondValidated.referral_message,
-        inputs.resumeText
+        inputs.resumeText,
+        jobContext
       );
-      return { data: secondValidated, validation, modelUsed: activeModel };
-    } catch (secondParseError: any) {
-      throw new Error(`Failed to generate outreach copy: ${secondParseError.message}.`);
+
+      // If still ungrounded after retry, use sanitized text (with ungrounded sentences removed)
+      return {
+        data: {
+          cover_note: secondValidation.sanitizedCoverNote,
+          referral_message: secondValidation.sanitizedReferralMessage,
+        },
+        validation: secondValidation,
+        modelUsed: activeModel,
+      };
+    } catch (secondErr: any) {
+      // If retry errored but we had a partially usable attempt 1, sanitize and return
+      if (validation && parsedJson) {
+        return {
+          data: {
+            cover_note: validation.sanitizedCoverNote,
+            referral_message: validation.sanitizedReferralMessage,
+          },
+          validation,
+          modelUsed: activeModel,
+        };
+      }
+      throw new Error(`Failed to generate outreach copy: ${secondErr.message}`);
     }
   }
+
+  return {
+    data: {
+      cover_note: validation.sanitizedCoverNote,
+      referral_message: validation.sanitizedReferralMessage,
+    },
+    validation,
+    modelUsed: activeModel,
+  };
 }

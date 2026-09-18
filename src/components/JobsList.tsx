@@ -38,6 +38,9 @@ export interface JobRecord {
   scored_at: string | null;
   cover_note?: string | null;
   referral_message?: string | null;
+  last_generated_cover_note?: string | null;
+  last_generated_referral?: string | null;
+  outreach_model?: string | null;
   outreach_updated_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -86,6 +89,9 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
     jobId: string,
     coverNote: string,
     referralMessage: string,
+    lastGeneratedCoverNote: string,
+    lastGeneratedReferral: string,
+    outreachModel: string,
     outreachUpdatedAt: string
   ) => {
     setJobs((prev) =>
@@ -95,6 +101,9 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
               ...j,
               cover_note: coverNote,
               referral_message: referralMessage,
+              last_generated_cover_note: lastGeneratedCoverNote,
+              last_generated_referral: lastGeneratedReferral,
+              outreach_model: outreachModel,
               outreach_updated_at: outreachUpdatedAt,
             }
           : j
@@ -107,6 +116,9 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
               ...prev,
               cover_note: coverNote,
               referral_message: referralMessage,
+              last_generated_cover_note: lastGeneratedCoverNote,
+              last_generated_referral: lastGeneratedReferral,
+              outreach_model: outreachModel,
               outreach_updated_at: outreachUpdatedAt,
             }
           : null
@@ -769,6 +781,28 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                             title="Draft tailored cover note and LinkedIn referral message"
                           >
                             {job.cover_note ? '✍️ View Outreach' : '✍️ Draft Outreach'}
+                          </button>
+                        )}
+                        {job.score_status === 'scored' && job.seniority_match !== 'fit' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOutreachJob(job);
+                              setIsOutreachModalOpen(true);
+                            }}
+                            className="btn-link"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: '0.375rem 0.5rem',
+                              fontSize: '0.75rem',
+                              color: job.cover_note ? '#818cf8' : 'var(--text-muted)',
+                              textDecoration: 'underline',
+                              cursor: 'pointer',
+                            }}
+                            title="Draft outreach anyway for non-fit role"
+                          >
+                            {job.cover_note ? 'View draft' : 'Draft anyway'}
                           </button>
                         )}
                       </>
