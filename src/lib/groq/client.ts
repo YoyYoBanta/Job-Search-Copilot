@@ -75,6 +75,7 @@ async function callGroqChat(
 
   if (response.status === 429) {
     const errorBody = await response.text();
+    console.error(`[Groq HTTP 429 Rate Limit] Model: ${model}, Status: 429, Body:`, errorBody);
     const retryDelay = rateLimits.retryAfterSeconds || rateLimits.resetTokensSeconds || 5;
     const error: any = new Error(`Groq rate limit exceeded (HTTP 429): ${errorBody}`);
     error.status = 429;
@@ -85,6 +86,7 @@ async function callGroqChat(
 
   if (!response.ok) {
     const errorBody = await response.text();
+    console.error(`[Groq HTTP Error] Model: ${model}, Status: ${response.status}, Body:`, errorBody);
     throw new Error(`Groq API error (HTTP ${response.status}): ${errorBody}`);
   }
 
@@ -98,8 +100,9 @@ export async function requestGroqFitScore(
   userMessage: string
 ): Promise<GroqScoreResult> {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing GROQ_API_KEY environment variable.');
+  if (!apiKey || !apiKey.trim()) {
+    console.error('[Groq Config Error]: Missing GROQ_API_KEY environment variable in process.env');
+    throw new Error('Missing GROQ_API_KEY environment variable. Please configure GROQ_API_KEY in Vercel or .env.local.');
   }
 
   let activeModel = PRIMARY_GROQ_MODEL;
@@ -122,6 +125,7 @@ export async function requestGroqFitScore(
   } catch (err: any) {
     // If daily token cap was hit on primary 70b model, automatically fall back to 8b instant model
     if (err.status === 429 && err.isDailyCap) {
+      console.warn(`[Groq Daily Cap Hit] Falling back from ${PRIMARY_GROQ_MODEL} to ${FALLBACK_GROQ_MODEL}`);
       activeModel = FALLBACK_GROQ_MODEL;
       const fallbackRes = await callGroqChat(
         activeModel,
@@ -138,29 +142,36 @@ export async function requestGroqFitScore(
     }
   }
 
-  // Attempt to parse and validate JSON
+  // Attempt 1 to parse and validate JSON
   try {
     const parsed = extractAndParseJson(rawContent);
     const validated = FitScoreResponseSchema.parse(parsed);
     return { data: validated, modelUsed: activeModel, rateLimitInfo: rateLimits };
-  } catch (firstParseError) {
-    // Retry once with a corrective JSON prompt
-    const correctiveRes = await callGroqChat(
-      activeModel,
-      [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: rawContent },
-        {
-          role: 'user',
-          content: 'Your previous response was not valid JSON matching the required schema. Return ONLY valid JSON with keys: fit_score (number 0-100), top_reasons (string[]), gaps (string[]), recommended_resume_bullets_to_lead_with (string[]), seniority_match ("under"|"fit"|"over").',
-        },
-      ],
-      apiKey
-    );
+  } catch (firstParseError: any) {
+    console.error('[Groq JSON Parse/Validation Attempt 1 Failed]:', firstParseError.message, 'Raw LLM Content:', rawContent);
 
-    const secondParsed = extractAndParseJson(correctiveRes.content);
-    const secondValidated = FitScoreResponseSchema.parse(secondParsed);
-    return { data: secondValidated, modelUsed: activeModel, rateLimitInfo: correctiveRes.rateLimits };
+    // Attempt 2: Retry once with a corrective JSON prompt
+    try {
+      const correctiveRes = await callGroqChat(
+        activeModel,
+        [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: rawContent },
+          {
+            role: 'user',
+            content: 'Your previous response was not valid JSON matching the required schema. Return ONLY valid JSON with keys: fit_score (number 0-100), top_reasons (string[]), gaps (string[]), recommended_resume_bullets_to_lead_with (string[]), seniority_match ("under"|"fit"|"over").',
+          },
+        ],
+        apiKey
+      );
+
+      const secondParsed = extractAndParseJson(correctiveRes.content);
+      const secondValidated = FitScoreResponseSchema.parse(secondParsed);
+      return { data: secondValidated, modelUsed: activeModel, rateLimitInfo: correctiveRes.rateLimits };
+    } catch (secondParseError: any) {
+      console.error('[Groq JSON Parse/Validation Attempt 2 Failed]:', secondParseError.message, 'Raw LLM Content on retry:', correctiveRes?.content || 'N/A');
+      throw new Error(`Failed to parse/validate JSON from Groq: ${secondParseError.message}. Raw output: ${(correctiveRes?.content || rawContent).slice(0, 200)}`);
+    }
   }
 }

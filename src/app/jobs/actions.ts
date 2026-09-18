@@ -146,6 +146,7 @@ export async function resetJobScoreAction(jobId: string): Promise<{ success: boo
         match_analysis: null,
         seniority_match: null,
         scored_model: null,
+        score_error: null,
         scored_at: null,
       })
       .eq('id', jobId)

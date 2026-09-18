@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         recommended_resume_bullets_to_lead_with: verifiedBullets,
       };
 
-      // 6. Update job in Supabase
+      // 6. Update job in Supabase (clearing any previous score_error)
       const { error: updateError } = await supabase
         .from('jobs')
         .update({
@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
           seniority_match: data.seniority_match,
           scored_model: modelUsed,
           score_status: 'scored',
+          score_error: null,
           scored_at: new Date().toISOString(),
         })
         .eq('id', jobId)
@@ -108,6 +109,8 @@ export async function POST(request: NextRequest) {
         rateLimitInfo,
       });
     } catch (scoringError: any) {
+      console.error(`[Scoring API Error for Job ${jobId}]:`, scoringError?.message || scoringError);
+
       // If 429 rate limited, return retryAfterSeconds for client queue pacing without marking job as failed
       if (scoringError.status === 429) {
         return NextResponse.json(
@@ -120,19 +123,25 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // If unrecoverable error, mark job as failed
+      const readableError = scoringError?.message || 'Scoring failed due to an unexpected error';
+
+      // If unrecoverable error, mark job as failed and persist readable error message
       await supabase
         .from('jobs')
-        .update({ score_status: 'failed' })
+        .update({
+          score_status: 'failed',
+          score_error: readableError,
+        })
         .eq('id', jobId)
         .eq('user_id', user.id);
 
       return NextResponse.json(
-        { error: 'scoring_failed', message: scoringError.message },
+        { error: 'scoring_failed', message: readableError },
         { status: 500 }
       );
     }
   } catch (authOrSystemError: any) {
+    console.error('[Scoring Endpoint Top-Level Error]:', authOrSystemError?.message || authOrSystemError);
     return NextResponse.json(
       { error: authOrSystemError?.message || 'Unauthorized or server error' },
       { status: 401 }

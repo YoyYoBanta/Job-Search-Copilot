@@ -23,7 +23,8 @@ export default async function HomePage() {
   const { count: jobsCount } = await supabase
     .from('jobs')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('dismissed', false);
 
   const hasResume = Boolean(profile?.resume_text?.trim());
 
@@ -34,14 +35,14 @@ export default async function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span className="badge badge-emerald">Phase 2 Active</span>
+              <span className="badge badge-emerald">Phase 3 Active</span>
               <span className="badge badge-amber">Single-User</span>
             </div>
             <h1 className="card-title" style={{ fontSize: '1.75rem' }}>
               Welcome back, {user.email}
             </h1>
             <p className="card-desc" style={{ maxWidth: '650px', marginTop: '0.5rem' }}>
-              Your personal Job Search Copilot is active. Target companies and job feeds are configured with strict product role and location filters.
+              Your personal Job Search Copilot is active. Target companies, job feeds, and AI fit matcher are ready to evaluate opportunities.
             </p>
           </div>
 
@@ -78,7 +79,7 @@ export default async function HomePage() {
               'No resume found. Paste your resume text once to enable match scoring.'
             )}
           </p>
-          <Link href="/profile" className="btn btn-secondary" style={{ width: '100%' }}>
+          <Link href="/profile" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
             Manage Resume
           </Link>
         </div>
@@ -87,10 +88,10 @@ export default async function HomePage() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>Job Feeds & Filter</h3>
-            <span className="badge badge-emerald">Phase 2 Active</span>
+            <span className="badge badge-emerald">Active</span>
           </div>
           <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
-            {companiesCount || 0} target companies configured • {jobsCount || 0} matching jobs ingested.
+            {companiesCount || 0} target companies configured • {jobsCount || 0} active jobs ingested.
           </p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <Link href="/companies" className="btn btn-secondary" style={{ flex: 1, textAlign: 'center' }}>
@@ -102,20 +103,23 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* AI Matcher Preview */}
-        <div className="card" style={{ opacity: 0.85 }}>
+        {/* AI Matcher Active Card */}
+        <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>AI Matcher</h3>
-            <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
-              Phase 3
+            <span className="badge badge-emerald">
+              Phase 3 Active
             </span>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            Single-job sequential Groq scoring queue with strict JSON schema, 429 backoff, and feedback rating.
+          <p style={{ fontSize: '0.875rem', marginBottom: '1.25rem', color: 'var(--text-secondary)' }}>
+            Sequential Groq scoring with seniority matcher, anti-fabrication bullet verification, and feedback.
           </p>
+          <Link href="/jobs" className="btn btn-primary" style={{ width: '100%', textAlign: 'center' }}>
+            ⚡ Score Jobs
+          </Link>
         </div>
 
-        {/* Tracker Preview */}
+        {/* Tracker Preview Card */}
         <div className="card" style={{ opacity: 0.85 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <h3 className="card-title" style={{ fontSize: '1.125rem' }}>Pipeline Tracker</h3>

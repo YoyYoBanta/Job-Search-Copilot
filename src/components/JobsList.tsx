@@ -28,6 +28,7 @@ export interface JobRecord {
   needs_eligibility_check: boolean;
   dismissed: boolean;
   score_status: 'pending' | 'scored' | 'failed';
+  score_error?: string | null;
   fit_score: number | null;
   match_analysis: MatchAnalysis | null;
   seniority_match: 'under' | 'fit' | 'over' | string | null;
@@ -73,7 +74,8 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
   const [currentlyScoringJobId, setCurrentlyScoringJobId] = useState<string | null>(null);
   const abortQueueRef = useRef<boolean>(false);
 
-  const pendingJobs = jobs.filter((j) => !j.dismissed && (j.score_status === 'pending' || j.score_status === 'failed'));
+  const unscoredJobs = jobs.filter((j) => !j.dismissed && j.score_status === 'pending');
+  const failedJobs = jobs.filter((j) => !j.dismissed && j.score_status === 'failed');
   const totalDismissed = jobs.filter((j) => j.dismissed).length;
   const activeJobsCount = jobs.length - totalDismissed;
 
@@ -111,6 +113,7 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                   seniority_match: resData.seniority_match,
                   scored_model: resData.scored_model,
                   score_status: 'scored',
+                  score_error: null,
                   scored_at: new Date().toISOString(),
                 }
               : j
@@ -122,15 +125,17 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
         const waitSec = resData.retryAfterSeconds || 5;
         throw { is429: true, retryAfterSeconds: waitSec, message: resData.message };
       } else {
+        const errMsg = resData?.message || 'Scoring failed';
         setJobs((prev) =>
-          prev.map((j) => (j.id === jobId ? { ...j, score_status: 'failed' } : j))
+          prev.map((j) => (j.id === jobId ? { ...j, score_status: 'failed', score_error: errMsg } : j))
         );
         return false;
       }
     } catch (err: any) {
       if (err?.is429) throw err;
+      const errMsg = err?.message || 'Scoring network or server error';
       setJobs((prev) =>
-        prev.map((j) => (j.id === jobId ? { ...j, score_status: 'failed' } : j))
+        prev.map((j) => (j.id === jobId ? { ...j, score_status: 'failed', score_error: errMsg } : j))
       );
       return false;
     } finally {
@@ -153,6 +158,7 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
               match_analysis: null,
               seniority_match: null,
               scored_model: null,
+              score_error: null,
               scored_at: null,
             }
           : j
@@ -278,9 +284,14 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
             <h1 className="card-title" style={{ margin: 0 }}>Ingested Jobs</h1>
             <span className="badge badge-emerald">{activeJobsCount} Active</span>
-            {pendingJobs.length > 0 && (
+            {unscoredJobs.length > 0 && (
               <span className="badge badge-amber">
-                ⚡ {pendingJobs.length} Unscored
+                ⚡ {unscoredJobs.length} Unscored
+              </span>
+            )}
+            {failedJobs.length > 0 && (
+              <span className="badge badge-rose">
+                ⚠️ {failedJobs.length} Failed
               </span>
             )}
             {totalDismissed > 0 && (
@@ -295,13 +306,13 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {pendingJobs.length > 0 && (
+          {unscoredJobs.length > 0 && (
             <button
               onClick={isScoringQueueRunning ? handleStopQueue : handleScoreAllPending}
               className={`btn ${isScoringQueueRunning ? 'btn-danger' : 'btn-primary'}`}
               style={{ fontSize: '0.8125rem', padding: '0.5rem 0.85rem', fontWeight: 600 }}
             >
-              {isScoringQueueRunning ? '⏹ Stop Scoring' : `⚡ Score All Pending (${pendingJobs.length})`}
+              {isScoringQueueRunning ? '⏹ Stop Scoring' : `⚡ Score All Pending (${unscoredJobs.length})`}
             </button>
           )}
 
@@ -491,7 +502,7 @@ export function JobsList({ initialJobs, initialFeedbacks = {} }: JobsListProps) 
                       <h3 style={{ fontSize: '1.125rem', color: 'var(--text-primary)', margin: 0 }}>
                         {job.title}
                       </h3>
-                      <ScoreStatusBadge status={job.score_status} fitScore={job.fit_score} />
+                      <ScoreStatusBadge status={job.score_status} fitScore={job.fit_score} scoreError={job.score_error} />
                       <SeniorityBadge seniority={job.seniority_match} />
                       {job.needs_eligibility_check && <EligibilityBadge />}
                       {job.dismissed && (

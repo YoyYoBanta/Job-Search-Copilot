@@ -1,9 +1,10 @@
 interface ScoreStatusBadgeProps {
   status: 'pending' | 'scored' | 'failed' | string;
   fitScore?: number | null;
+  scoreError?: string | null;
 }
 
-export function ScoreStatusBadge({ status, fitScore }: ScoreStatusBadgeProps) {
+export function ScoreStatusBadge({ status, fitScore, scoreError }: ScoreStatusBadgeProps) {
   if (status === 'scored' && fitScore !== undefined && fitScore !== null) {
     const isHigh = fitScore >= 75;
     const isMid = fitScore >= 50;
@@ -18,9 +19,25 @@ export function ScoreStatusBadge({ status, fitScore }: ScoreStatusBadgeProps) {
 
   if (status === 'failed') {
     return (
-      <span className="badge badge-rose">
-        Scoring Failed
-      </span>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+        <span className="badge badge-rose">
+          Scoring Failed
+        </span>
+        {scoreError && (
+          <span
+            style={{
+              fontSize: '0.6875rem',
+              color: '#f87171',
+              maxWidth: '320px',
+              wordBreak: 'break-word',
+              lineHeight: 1.3,
+            }}
+            title={scoreError}
+          >
+            {scoreError.length > 90 ? scoreError.slice(0, 87) + '...' : scoreError}
+          </span>
+        )}
+      </div>
     );
   }
 
