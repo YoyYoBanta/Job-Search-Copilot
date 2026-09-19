@@ -31,7 +31,45 @@ export default async function HomePage() {
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id);
 
+  const { data: lastCronRun } = await supabase
+    .from('cron_runs')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const hasResume = Boolean(profile?.resume_text?.trim());
+
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'success':
+        return <span className="badge badge-emerald">Success</span>;
+      case 'partial':
+        return <span className="badge badge-amber">Partial Run</span>;
+      case 'failed':
+        return <span className="badge badge-red">Failed</span>;
+      default:
+        return <span className="badge badge-gray">No Runs Yet</span>;
+    }
+  };
+
+  const getReasonLabel = (reason?: string) => {
+    switch (reason) {
+      case 'done':
+        return 'All Pending Scored';
+      case 'cap':
+        return 'Daily Cap Reached';
+      case 'time':
+        return 'Time Limit Reached (45s)';
+      case 'rate_limit':
+        return 'Groq Rate Limit Paused';
+      case 'error':
+        return 'Encountered Error';
+      default:
+        return reason || 'N/A';
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -47,7 +85,7 @@ export default async function HomePage() {
               Welcome back, {user.email}
             </h1>
             <p className="card-desc" style={{ maxWidth: '650px', marginTop: '0.5rem' }}>
-              Your personal Job Search Copilot is active. Target companies, job feeds, AI fit scoring, tailored outreach, and application pipeline tracking are ready.
+              Your personal Job Search Copilot is active. Target companies, automated job feeds, AI fit scoring, tailored outreach, and application pipeline tracking are ready.
             </p>
           </div>
 
@@ -60,6 +98,110 @@ export default async function HomePage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      {/* Auto-Fetch Cron Status Card */}
+      <div className="card" style={{ borderLeft: '4px solid var(--primary, #6366f1)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <h3 className="card-title" style={{ fontSize: '1.125rem' }}>
+                Automated Job Fetching & Scoring
+              </h3>
+              {getStatusBadge(lastCronRun?.status)}
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Scheduled via GitHub Actions every 6 hours. Automatically pulls new ATS postings and scores them with Groq.
+            </p>
+          </div>
+          {lastCronRun && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Last execution</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                <LocalTime isoDate={lastCronRun.started_at} format="datetime" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {lastCronRun ? (
+          <div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '0.75rem',
+                padding: '0.875rem',
+                backgroundColor: 'var(--bg-card-secondary, rgba(255, 255, 255, 0.03))',
+                borderRadius: '8px',
+                border: '1px solid var(--border, rgba(255, 255, 255, 0.08))',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Raw Fetched</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{lastCronRun.fetched}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Filter Passed</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--accent-info, #38bdf8)' }}>
+                  {lastCronRun.matched}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>New Inserted</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--accent-success, #34d399)' }}>
+                  {lastCronRun.inserted}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Auto-Scored</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--accent-warning, #fbbf24)' }}>
+                  {lastCronRun.scored}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Stop Reason</div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 500, marginTop: '0.25rem' }}>
+                  {getReasonLabel(lastCronRun.stopped_reason)}
+                </div>
+              </div>
+            </div>
+
+            {Array.isArray(lastCronRun.errors) && lastCronRun.errors.length > 0 && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.75rem',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  fontSize: '0.8125rem',
+                  color: '#f87171',
+                }}
+              >
+                <strong>Run Notices:</strong>
+                <ul style={{ margin: '0.25rem 0 0 1.25rem', padding: 0 }}>
+                  {lastCronRun.errors.map((errStr: string, idx: number) => (
+                    <li key={idx}>{errStr}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '1rem',
+              backgroundColor: 'var(--bg-card-secondary, rgba(255, 255, 255, 0.02))',
+              borderRadius: '8px',
+              textAlign: 'center',
+              color: 'var(--text-secondary)',
+              fontSize: '0.875rem',
+            }}
+          >
+            No automated runs logged yet. Once GitHub Actions runs or you trigger a manual run, execution metrics will appear here.
+          </div>
+        )}
       </div>
 
       {/* Grid of Modules */}

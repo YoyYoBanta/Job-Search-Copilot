@@ -24,7 +24,8 @@ export async function fetchRawJobsForCompany(company: CompanyRecord): Promise<Ra
 
 export async function ingestJobsForCompany(
   company: CompanyRecord,
-  userId: string
+  userId: string,
+  customClient?: any
 ): Promise<IngestionMetrics> {
   const metrics: IngestionMetrics = {
     companyName: company.name,
@@ -62,7 +63,7 @@ export async function ingestJobsForCompany(
       return metrics;
     }
 
-    const supabase = await createClient();
+    const supabase = customClient || (await createClient());
 
     // 3. Query existing job URLs for this batch only, chunked in batches of 200
     // Note: Does NOT filter by dismissed; dismissed rows are preserved in DB and skipped

@@ -1,0 +1,43 @@
+name: Auto Fetch Jobs
+
+on:
+  schedule:
+    # Runs every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-fetch
+  cancel-in-progress: false
+
+jobs:
+  auto-fetch:
+    name: Trigger Ingestion & Scoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Call Auto-Fetch Endpoint
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then
+            echo "::error::Secret APP_URL is not configured in repository secrets."
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "::error::Secret CRON_SECRET is not configured in repository secrets."
+            exit 1
+          fi
+
+          # Strip any trailing slash from APP_URL
+          BASE_URL="${{ secrets.APP_URL }}"
+          BASE_URL="${BASE_URL%/}"
+
+          echo "Triggering POST ${BASE_URL}/api/cron/fetch..."
+
+          curl -X POST "${BASE_URL}/api/cron/fetch" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail-with-body \
+            --show-error \
+            --silent

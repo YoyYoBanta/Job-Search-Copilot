@@ -14,6 +14,7 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute =
     path === '/login' ||
     path === '/unauthorized' ||
+    path === '/api/cron/fetch' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/auth');
 
