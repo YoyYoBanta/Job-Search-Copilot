@@ -154,6 +154,12 @@ export default async function HomePage() {
                 </div>
               </div>
               <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pre-filtered</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  {lastCronRun.prefiltered || 0}
+                </div>
+              </div>
+              <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Auto-Scored</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--accent-warning, #fbbf24)' }}>
                   {lastCronRun.scored}

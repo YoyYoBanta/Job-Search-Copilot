@@ -106,7 +106,8 @@ async function callGroqChat(
 
 export async function requestGroqFitScore(
   systemMessage: string,
-  userMessage: string
+  userMessage: string,
+  overrideModel?: string
 ): Promise<GroqScoreResult> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -117,7 +118,7 @@ export async function requestGroqFitScore(
   const primaryModel = getPrimaryGroqModel();
   const fallbackModel = getFallbackGroqModel();
 
-  let activeModel = primaryModel;
+  let activeModel = overrideModel || primaryModel;
   let rawContent: string;
   let rateLimits: GroqRateLimitInfo;
 
@@ -133,6 +134,11 @@ export async function requestGroqFitScore(
     rawContent = res.content;
     rateLimits = res.rateLimits;
   } catch (err: any) {
+    if (overrideModel) {
+      // Caller explicitly manages models and fallbacks
+      throw err;
+    }
+
     // If primary model does not exist (404) or daily token cap was hit (429), fall back to fallback model
     const shouldFallback =
       (err.status === 404 || err.isModelNotFound) ||

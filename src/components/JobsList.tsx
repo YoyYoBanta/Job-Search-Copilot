@@ -27,7 +27,9 @@ export interface JobRecord {
   location: string;
   job_url: string;
   description: string;
-  source: 'feed' | 'manual';
+  source: 'feed' | 'manual' | 'search';
+  apply_options?: Array<{ publisher: string; apply_link: string; is_direct?: boolean }>;
+  external_id?: string | null;
   needs_eligibility_check: boolean;
   dismissed: boolean;
   score_status: 'pending' | 'scored' | 'failed';
@@ -722,6 +724,21 @@ export function JobsList({
                         </Link>
                       )}
                       {job.needs_eligibility_check && <EligibilityBadge />}
+                      {job.source === 'search' && (
+                        <span className="badge badge-blue" style={{ fontSize: '0.6875rem' }}>
+                          Search
+                        </span>
+                      )}
+                      {job.source === 'feed' && (
+                        <span className="badge badge-emerald" style={{ fontSize: '0.6875rem' }}>
+                          Board
+                        </span>
+                      )}
+                      {job.source === 'manual' && (
+                        <span className="badge badge-amber" style={{ fontSize: '0.6875rem' }}>
+                          Manual
+                        </span>
+                      )}
                       {job.dismissed && (
                         <span className="badge badge-rose" style={{ fontSize: '0.6875rem' }}>
                           Dismissed
@@ -752,16 +769,55 @@ export function JobsList({
                       </span>
                     </div>
 
-                    {/* Action Links & Quick Controls */}
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', fontSize: '0.8125rem' }}>
-                      <a
-                        href={job.job_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                      >
-                        Original Posting ↗
-                      </a>
+                    {/* Action Links & Apply Options */}
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.8125rem' }}>
+                      {/* Main / Direct Apply Link */}
+                      {(() => {
+                        const directOpt = Array.isArray(job.apply_options)
+                          ? job.apply_options.find((o) => o.is_direct)
+                          : undefined;
+                        const mainApplyUrl = directOpt?.apply_link || job.job_url;
+                        return (
+                          <a
+                            href={mainApplyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              fontWeight: 600,
+                              color: 'var(--primary, #6366f1)',
+                            }}
+                          >
+                            {directOpt ? 'Apply Direct ↗' : 'Apply ↗'}
+                          </a>
+                        );
+                      })()}
+
+                      {/* Additional Publisher Links */}
+                      {Array.isArray(job.apply_options) &&
+                        job.apply_options.length > 0 &&
+                        job.apply_options
+                          .filter((opt) => !opt.is_direct)
+                          .map((opt, optIdx) => (
+                            <a
+                              key={optIdx}
+                              href={opt.apply_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                fontSize: '0.75rem',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                color: 'var(--text-secondary)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                              }}
+                            >
+                              {opt.publisher} ↗
+                            </a>
+                          ))}
 
                       <button
                         type="button"

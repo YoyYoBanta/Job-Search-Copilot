@@ -49,6 +49,7 @@ describe('Cron Runner Safety & Execution Logic', () => {
           return builder;
         }),
         gte: vi.fn(() => builder),
+        gt: vi.fn(() => builder),
         in: vi.fn(() => builder),
         order: vi.fn(() => builder),
         limit: vi.fn(() => builder),
@@ -82,7 +83,7 @@ describe('Cron Runner Safety & Execution Logic', () => {
             eqFilters: [...eqFilters],
             insertPayload: payload,
           });
-          if (table === 'companies') {
+          if (table === 'companies' || table === 'search_queries' || table === 'cron_runs') {
             return resolve({ data: [], error: null });
           }
           if (table === 'jobs' && currentOp === 'select') {
@@ -140,6 +141,7 @@ describe('Cron Runner Safety & Execution Logic', () => {
           update: () => builder,
           eq: () => builder,
           gte: () => builder,
+          gt: () => builder,
           in: () => builder,
           order: () => builder,
           limit: () => builder,
@@ -161,7 +163,9 @@ describe('Cron Runner Safety & Execution Logic', () => {
             return { data: null, error: null };
           },
           then: (resolve: any) => {
-            if (table === 'companies') return resolve({ data: [], error: null });
+            if (table === 'companies' || table === 'search_queries' || table === 'cron_runs') {
+              return resolve({ data: [], error: null });
+            }
             if (table === 'jobs') {
               return resolve({
                 data: [
@@ -185,11 +189,16 @@ describe('Cron Runner Safety & Execution Logic', () => {
     };
 
     // Mock Groq client throwing a 429 error
-    vi.spyOn(groqClient, 'requestGroqFitScore').mockRejectedValueOnce(
+    vi.spyOn(groqClient, 'requestGroqFitScore').mockRejectedValue(
       Object.assign(new Error('Rate limit exceeded'), { status: 429 })
     );
 
-    const result = await executeCronFetchAndScore(mockSupabase, OWNER_UID);
+    const result = await executeCronFetchAndScore(
+      mockSupabase,
+      OWNER_UID,
+      Date.now(),
+      async () => {}
+    );
 
     expect(result.stoppedReason).toBe('rate_limit');
     expect(result.scored).toBe(0);
@@ -215,6 +224,7 @@ describe('Cron Runner Safety & Execution Logic', () => {
           update: () => builder,
           eq: () => builder,
           gte: () => builder,
+          gt: () => builder,
           in: () => builder,
           order: () => builder,
           limit: () => builder,
@@ -233,7 +243,9 @@ describe('Cron Runner Safety & Execution Logic', () => {
             return { data: null, error: null };
           },
           then: (resolve: any) => {
-            if (table === 'companies') return resolve({ data: [], error: null });
+            if (table === 'companies' || table === 'search_queries' || table === 'cron_runs') {
+              return resolve({ data: [], error: null });
+            }
             if (table === 'jobs') {
               return resolve({
                 data: [

@@ -12,6 +12,24 @@ export interface CompanyActionState {
   message?: string;
 }
 
+export interface SearchQueryRecord {
+  id: string;
+  user_id: string;
+  query: string;
+  country: string;
+  date_posted: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SearchQueryActionState {
+  error?: string;
+  success?: boolean;
+  message?: string;
+  query?: SearchQueryRecord;
+}
+
 export async function addCompanyAction(
   prevState: CompanyActionState | null,
   formData: FormData
@@ -132,4 +150,93 @@ export async function triggerFetchAllCompanies(): Promise<IngestionMetrics[]> {
   revalidatePath('/companies');
   revalidatePath('/jobs');
   return results;
+}
+
+export async function addSearchQueryAction(
+  prevState: SearchQueryActionState | null,
+  formData: FormData
+): Promise<SearchQueryActionState> {
+  try {
+    const user = await requireAuth();
+    const query = (formData.get('query') as string || '').trim();
+    const country = (formData.get('country') as string || 'in').trim().toLowerCase();
+    const datePosted = (formData.get('date_posted') as string || 'week').trim().toLowerCase();
+
+    if (!query) {
+      return { error: 'Please enter a search query.' };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('search_queries')
+      .insert({
+        user_id: user.id,
+        query,
+        country,
+        date_posted: datePosted,
+        enabled: true,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return { error: `Search query "${query}" already exists.` };
+      }
+      return { error: `Failed to add query: ${error.message}` };
+    }
+
+    revalidatePath('/companies');
+    return {
+      success: true,
+      message: `Search query "${query}" added!`,
+      query: data as SearchQueryRecord,
+    };
+  } catch (err: any) {
+    return { error: err?.message || 'An unexpected error occurred.' };
+  }
+}
+
+export async function toggleSearchQueryAction(
+  queryId: string,
+  enabled: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('search_queries')
+      .update({ enabled })
+      .eq('id', queryId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/companies');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to update search query' };
+  }
+}
+
+export async function deleteSearchQueryAction(formData: FormData) {
+  try {
+    const user = await requireAuth();
+    const queryId = formData.get('query_id') as string;
+    if (!queryId) return;
+
+    const supabase = await createClient();
+    await supabase
+      .from('search_queries')
+      .delete()
+      .eq('id', queryId)
+      .eq('user_id', user.id);
+
+    revalidatePath('/companies');
+  } catch (err) {
+    console.error('Error deleting search query:', err);
+  }
 }
