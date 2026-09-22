@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useRef, useEffect } from 'react';
-import { dismissJobAction, restoreJobAction, recleanJobDescriptionsAction, resetJobScoreAction } from '@/app/jobs/actions';
+import { dismissJobAction, restoreJobAction, recleanJobDescriptionsAction, resetJobScoreAction, scanAtsKeywordsAction } from '@/app/jobs/actions';
 import { trackJobAction } from '@/app/tracker/actions';
 import { LocalTime } from '@/components/LocalTime';
 import { EligibilityBadge } from '@/components/EligibilityBadge';
@@ -9,6 +9,8 @@ import { ScoreStatusBadge } from '@/components/ScoreStatusBadge';
 import { SeniorityBadge } from '@/components/SeniorityBadge';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { OutreachModal } from '@/components/OutreachModal';
+import { AtsScanSection } from '@/components/AtsScanSection';
+import { AtsScanResult } from '@/lib/ats-scanner/types';
 import { formatShortModelName } from '@/lib/groq/config';
 import Link from 'next/link';
 
@@ -39,6 +41,11 @@ export interface JobRecord {
   seniority_match: 'under' | 'fit' | 'over' | string | null;
   scored_model: string | null;
   scored_at: string | null;
+  ats_scan?: AtsScanResult | null;
+  ats_coverage?: number | null;
+  ats_scanned_at?: string | null;
+  ats_model?: string | null;
+  ats_resume_fingerprint?: string | null;
   cover_note?: string | null;
   referral_message?: string | null;
   last_generated_cover_note?: string | null;
@@ -77,6 +84,9 @@ export function JobsList({
   // Expanded views
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [viewingDescriptionId, setViewingDescriptionId] = useState<string | null>(null);
+  const [viewingAtsJobId, setViewingAtsJobId] = useState<string | null>(null);
+  const [atsScanningJobId, setAtsScanningJobId] = useState<string | null>(null);
+  const [atsScanStaleMap, setAtsScanStaleMap] = useState<Record<string, boolean>>({});
 
   // Maintenance & Action Feedback
   const [isRecleaning, startRecleanTransition] = useTransition();
@@ -86,6 +96,55 @@ export function JobsList({
     isError?: boolean;
     isWarning?: boolean;
   } | null>(null);
+
+  const handleRunAtsScan = async (jobId: string, forceRescan: boolean = false) => {
+    setAtsScanningJobId(jobId);
+    setViewingAtsJobId(jobId);
+
+    try {
+      const res = await scanAtsKeywordsAction(jobId, { forceRescan });
+      if (res.success && res.ats_scan) {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === jobId
+              ? {
+                  ...j,
+                  ats_scan: res.ats_scan,
+                  ats_coverage: res.ats_coverage ?? res.ats_scan?.coverage.overall_percentage ?? null,
+                  ats_scanned_at: res.ats_scanned_at ?? new Date().toISOString(),
+                  ats_model: res.ats_model ?? null,
+                  ats_resume_fingerprint: res.ats_resume_fingerprint ?? null,
+                }
+              : j
+          )
+        );
+        if (res.isStale) {
+          setAtsScanStaleMap((prev) => ({ ...prev, [jobId]: true }));
+        } else {
+          setAtsScanStaleMap((prev) => ({ ...prev, [jobId]: false }));
+        }
+        setActionMessage({
+          text: res.cached ? 'Loaded cached ATS scan.' : 'ATS scan completed successfully!',
+          isError: false,
+        });
+        setTimeout(() => setActionMessage(null), 4000);
+      } else {
+        setActionMessage({
+          text: res.error || 'Failed to complete ATS scan.',
+          isError: true,
+        });
+        setTimeout(() => setActionMessage(null), 6000);
+      }
+    } catch (err: any) {
+      setActionMessage({
+        text: err?.message || 'Unexpected error running ATS scan.',
+        isError: true,
+      });
+      setTimeout(() => setActionMessage(null), 6000);
+    } finally {
+      setAtsScanningJobId(null);
+    }
+  };
 
   // Sync state when initialJobs change from server revalidation
   useEffect(() => {
@@ -844,6 +903,37 @@ export function JobsList({
                           {isExpanded ? 'Hide Match Analysis ▲' : '🎯 View Match Analysis ▼'}
                         </button>
                       )}
+
+                      {job.score_status === 'scored' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (job.ats_scan) {
+                              setViewingAtsJobId(viewingAtsJobId === job.id ? null : job.id);
+                            } else {
+                              handleRunAtsScan(job.id);
+                            }
+                          }}
+                          disabled={atsScanningJobId === job.id}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent-cyan)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: 'inherit',
+                            padding: 0,
+                          }}
+                        >
+                          {atsScanningJobId === job.id
+                            ? 'Scanning ATS...'
+                            : viewingAtsJobId === job.id
+                            ? 'Hide ATS Scan ▲'
+                            : job.ats_scan
+                            ? `🔍 ATS Scan (${job.ats_coverage ?? job.ats_scan.coverage.overall_percentage}%) ▼`
+                            : '🔍 ATS Scan ▼'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -925,6 +1015,40 @@ export function JobsList({
                             title="Draft outreach anyway for non-fit role"
                           >
                             {job.cover_note ? 'View draft' : 'Draft anyway'}
+                          </button>
+                        )}
+
+                        {job.score_status === 'scored' && !job.ats_scan && (
+                          <button
+                            type="button"
+                            onClick={() => handleRunAtsScan(job.id)}
+                            disabled={atsScanningJobId === job.id}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '0.375rem 0.65rem',
+                              fontSize: '0.75rem',
+                              borderColor: 'rgba(6, 182, 212, 0.4)',
+                              color: 'var(--accent-cyan)',
+                            }}
+                            title="Run ATS keyword scan against your resume"
+                          >
+                            {atsScanningJobId === job.id ? 'Scanning...' : '🔍 ATS Scan'}
+                          </button>
+                        )}
+                        {job.score_status === 'scored' && job.ats_scan && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingAtsJobId(viewingAtsJobId === job.id ? null : job.id)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '0.375rem 0.65rem',
+                              fontSize: '0.75rem',
+                              borderColor: 'rgba(6, 182, 212, 0.4)',
+                              color: 'var(--accent-cyan)',
+                            }}
+                            title="View ATS keyword scan results"
+                          >
+                            🔍 ATS: {job.ats_coverage ?? job.ats_scan.coverage.overall_percentage}%
                           </button>
                         )}
 
@@ -1099,6 +1223,34 @@ export function JobsList({
                         </span>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* Collapsible ATS Keyword Scan Drawer */}
+                {viewingAtsJobId === job.id && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    {atsScanningJobId === job.id && !job.ats_scan ? (
+                      <div
+                        className="card"
+                        style={{
+                          padding: '1.5rem',
+                          textAlign: 'center',
+                          backgroundColor: 'var(--bg-secondary)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        <span className="spinner" style={{ width: '16px', height: '16px', display: 'inline-block', marginRight: '0.5rem' }}></span>
+                        Analyzing Job Description keywords & matching against resume...
+                      </div>
+                    ) : job.ats_scan ? (
+                      <AtsScanSection
+                        scanResult={job.ats_scan}
+                        isStale={Boolean(atsScanStaleMap[job.id])}
+                        onRescan={() => handleRunAtsScan(job.id, true)}
+                        isRescanning={atsScanningJobId === job.id}
+                      />
+                    ) : null}
                   </div>
                 )}
               </div>

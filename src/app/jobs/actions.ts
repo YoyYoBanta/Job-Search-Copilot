@@ -510,4 +510,114 @@ export async function saveOutreachDraftAction(
   }
 }
 
+export interface ScanAtsActionResult {
+  success: boolean;
+  ats_scan?: import('@/lib/ats-scanner/types').AtsScanResult;
+  ats_coverage?: number;
+  ats_scanned_at?: string;
+  ats_model?: string;
+  ats_resume_fingerprint?: string;
+  isStale?: boolean;
+  cached?: boolean;
+  error?: string;
+}
+
+/**
+ * Runs or retrieves the ATS keyword scan for a specific job.
+ */
+export async function scanAtsKeywordsAction(
+  jobId: string,
+  options: { forceRescan?: boolean } = {}
+): Promise<ScanAtsActionResult> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // 1. Fetch job record
+    const { data: job, error: jobErr } = await supabase
+      .from('jobs')
+      .select('id, title, company_name, description, score_status, ats_scan, ats_coverage, ats_scanned_at, ats_model, ats_resume_fingerprint')
+      .eq('id', jobId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (jobErr || !job) {
+      return { success: false, error: jobErr?.message || 'Job not found.' };
+    }
+
+    // 2. Fetch user profile resume
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('resume_text')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile || !profile.resume_text?.trim()) {
+      return { success: false, error: 'Please save your master resume in My Profile before running ATS Scan.' };
+    }
+
+    const { isAtsScanStale } = await import('@/lib/ats-scanner/fingerprint');
+
+    // 3. Return cached scan if not forcing rescan and already scanned
+    if (!options.forceRescan && job.ats_scan) {
+      const isStale = isAtsScanStale(job.ats_resume_fingerprint, profile.resume_text);
+      return {
+        success: true,
+        ats_scan: job.ats_scan as import('@/lib/ats-scanner/types').AtsScanResult,
+        ats_coverage: job.ats_coverage ?? undefined,
+        ats_scanned_at: job.ats_scanned_at || undefined,
+        ats_model: job.ats_model || undefined,
+        ats_resume_fingerprint: job.ats_resume_fingerprint || undefined,
+        isStale,
+        cached: true,
+      };
+    }
+
+    // 4. Run ATS scan with Groq
+    const { executeAtsScan } = await import('@/lib/ats-scanner/scanner');
+    const scanResult = await executeAtsScan({
+      resumeText: profile.resume_text,
+      jobTitle: job.title,
+      companyName: job.company_name,
+      jobDescription: job.description,
+    });
+
+    const nowIso = new Date().toISOString();
+
+    // 5. Persist ATS scan results in Supabase
+    const { error: updateErr } = await supabase
+      .from('jobs')
+      .update({
+        ats_scan: scanResult,
+        ats_coverage: scanResult.coverage.overall_percentage,
+        ats_scanned_at: nowIso,
+        ats_model: scanResult.model_used,
+        ats_resume_fingerprint: scanResult.resume_fingerprint,
+      })
+      .eq('id', jobId)
+      .eq('user_id', user.id);
+
+    if (updateErr) {
+      return { success: false, error: `Failed to save ATS scan results: ${updateErr.message}` };
+    }
+
+    revalidatePath('/jobs');
+
+    return {
+      success: true,
+      ats_scan: scanResult,
+      ats_coverage: scanResult.coverage.overall_percentage,
+      ats_scanned_at: nowIso,
+      ats_model: scanResult.model_used,
+      ats_resume_fingerprint: scanResult.resume_fingerprint,
+      isStale: false,
+      cached: false,
+    };
+  } catch (err: any) {
+    console.error('[scanAtsKeywordsAction error]:', err);
+    return { success: false, error: err?.message || 'Unexpected error running ATS scan.' };
+  }
+}
+
+
 
