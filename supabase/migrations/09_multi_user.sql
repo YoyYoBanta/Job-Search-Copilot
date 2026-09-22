@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.user_filters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     include_titles TEXT[] NOT NULL DEFAULT ARRAY['Product Manager', 'APM', 'Associate Product', 'Product Owner', 'Product Analyst']::text[],
-    exclude_titles TEXT[] NOT NULL DEFAULT ARRAY['Director', 'Head of', 'VP', 'Principal', 'Group Product', 'Staff']::text[],
+    exclude_titles TEXT[] NOT NULL DEFAULT ARRAY['Director', 'Head of', 'VP', 'Principal', 'Group Product', 'Staff', 'Senior', 'Lead', 'Sr']::text[],
     allowed_locations TEXT[] NOT NULL DEFAULT ARRAY['India', 'Bangalore', 'Bengaluru', 'Mumbai', 'Pune', 'Gurgaon', 'Gurugram', 'Delhi', 'New Delhi', 'Noida', 'Hyderabad', 'Chennai']::text[],
     allow_remote BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -58,7 +58,7 @@ CREATE TRIGGER set_user_filters_updated_at
 INSERT INTO public.user_filters (user_id, include_titles, exclude_titles, allowed_locations, allow_remote)
 SELECT p.user_id,
        ARRAY['Product Manager', 'APM', 'Associate Product', 'Product Owner', 'Product Analyst']::text[],
-       ARRAY['Director', 'Head of', 'VP', 'Principal', 'Group Product', 'Staff']::text[],
+       ARRAY['Director', 'Head of', 'VP', 'Principal', 'Group Product', 'Staff', 'Senior', 'Lead', 'Sr']::text[],
        ARRAY['India', 'Bangalore', 'Bengaluru', 'Mumbai', 'Pune', 'Gurgaon', 'Gurugram', 'Delhi', 'New Delhi', 'Noida', 'Hyderabad', 'Chennai']::text[],
        true
 FROM public.profiles p

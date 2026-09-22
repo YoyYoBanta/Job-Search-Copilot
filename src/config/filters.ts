@@ -29,6 +29,9 @@ export const DEFAULT_EXCLUDE_TITLES = [
   'Principal',
   'Group Product',
   'Staff',
+  'Senior',
+  'Lead',
+  'Sr',
 ] as const;
 
 export const DEFAULT_ALLOWED_LOCATIONS = [

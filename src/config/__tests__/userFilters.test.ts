@@ -98,6 +98,30 @@ describe('Dynamic User Filters vs Static Filters Equivalence', () => {
       expect(res.reason).toContain('Remote roles are disabled');
     });
 
+    it('excludes "Senior Product Manager" in "Bengaluru, India" and "Lead Product Manager" with seeded user_filters row', () => {
+      const seededUserFiltersRow: UserFiltersConfig = {
+        include_titles: ['Product Manager', 'APM', 'Associate Product', 'Product Owner', 'Product Analyst'],
+        exclude_titles: ['Director', 'Head of', 'VP', 'Principal', 'Group Product', 'Staff', 'Senior', 'Lead', 'Sr'],
+        allowed_locations: ['India', 'Bangalore', 'Bengaluru', 'Mumbai', 'Pune', 'Gurgaon', 'Gurugram', 'Delhi', 'New Delhi', 'Noida', 'Hyderabad', 'Chennai'],
+        allow_remote: true,
+      };
+
+      const seniorRes = evaluateJobFilter('Senior Product Manager', 'Bengaluru, India', seededUserFiltersRow);
+      expect(seniorRes.passed).toBe(false);
+      expect(seniorRes.titleMatch).toBe(false);
+      expect(seniorRes.reason).toContain('Senior');
+
+      const leadRes = evaluateJobFilter('Lead Product Manager', 'Bengaluru, India', seededUserFiltersRow);
+      expect(leadRes.passed).toBe(false);
+      expect(leadRes.titleMatch).toBe(false);
+      expect(leadRes.reason).toContain('Lead');
+
+      const srRes = evaluateJobFilter('Sr Product Manager', 'Bengaluru, India', seededUserFiltersRow);
+      expect(srRes.passed).toBe(false);
+      expect(srRes.titleMatch).toBe(false);
+      expect(srRes.reason).toContain('Sr');
+    });
+
     it('preserves code-level region-restricted remote exclusion even with custom user filters', () => {
       const customConfig: UserFiltersConfig = {
         ...defaultUserFiltersConfig,

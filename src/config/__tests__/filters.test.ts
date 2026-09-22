@@ -109,9 +109,27 @@ describe('Job Filters Specification Tests', () => {
       expect(res.matched).toBe(true);
     });
 
-    it('passes "Senior Product Analyst"', () => {
-      const res = evaluateTitle('Senior Product Analyst');
+    it('passes "Product Analyst"', () => {
+      const res = evaluateTitle('Product Analyst');
       expect(res.matched).toBe(true);
+    });
+
+    it('fails "Senior Product Manager" (contains excluded seniority term "Senior")', () => {
+      const res = evaluateTitle('Senior Product Manager');
+      expect(res.matched).toBe(false);
+      expect(res.reason).toContain('Senior');
+    });
+
+    it('fails "Lead Product Manager" (contains excluded seniority term "Lead")', () => {
+      const res = evaluateTitle('Lead Product Manager');
+      expect(res.matched).toBe(false);
+      expect(res.reason).toContain('Lead');
+    });
+
+    it('fails "Sr Product Manager" (contains excluded seniority term "Sr")', () => {
+      const res = evaluateTitle('Sr Product Manager');
+      expect(res.matched).toBe(false);
+      expect(res.reason).toContain('Sr');
     });
 
     it('fails "VP of Product"', () => {
