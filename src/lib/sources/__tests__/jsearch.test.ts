@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   formatJSearchLocation,
   extractApplyOptions,
@@ -92,6 +92,92 @@ describe('JSearch Parser & Apply Option Utilities', () => {
       expect(options.length).toBe(1);
       expect(options[0].apply_link).toBe('https://finco.com/apply');
       expect(options[0].is_direct).toBe(true);
+    });
+  });
+
+  describe('fetchJSearchRawJobs', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      vi.resetModules();
+      process.env = { ...originalEnv, RAPIDAPI_KEY: 'test-rapidapi-key' };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      vi.restoreAllMocks();
+    });
+
+    it('throws error if RAPIDAPI_KEY is not set', async () => {
+      delete process.env.RAPIDAPI_KEY;
+      const { fetchJSearchRawJobs } = await import('../jsearch');
+      await expect(
+        fetchJSearchRawJobs({ query: 'Product Manager' })
+      ).rejects.toThrow('Missing RAPIDAPI_KEY');
+    });
+
+    it('makes request to configured endpoint with correct headers and query parameters', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ job_id: '123', job_title: 'PM' }] }),
+      });
+      global.fetch = mockFetch;
+
+      const { fetchJSearchRawJobs } = await import('../jsearch');
+      const jobs = await fetchJSearchRawJobs({
+        query: 'Associate Product Manager',
+        country: 'in',
+        datePosted: 'week',
+        numPages: 1,
+      });
+
+      expect(jobs.length).toBe(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const [calledUrl, calledInit] = mockFetch.mock.calls[0];
+      const url = new URL(calledUrl);
+      expect(url.origin + url.pathname).toBe('https://jsearch.p.rapidapi.com/search');
+      expect(url.searchParams.get('query')).toBe('Associate Product Manager');
+      expect(url.searchParams.get('country')).toBe('in');
+      expect(url.searchParams.get('date_posted')).toBe('week');
+      expect(url.searchParams.get('num_pages')).toBe('1');
+      expect(calledInit.headers['x-rapidapi-key']).toBe('test-rapidapi-key');
+      expect(calledInit.headers['x-rapidapi-host']).toBe('jsearch.p.rapidapi.com');
+    });
+
+    it('supports custom RAPIDAPI_JSEARCH_URL and RAPIDAPI_HOST env variables', async () => {
+      process.env.RAPIDAPI_JSEARCH_URL = 'https://custom-jsearch.p.rapidapi.com/v5/search';
+      process.env.RAPIDAPI_HOST = 'custom-jsearch.p.rapidapi.com';
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [] }),
+      });
+      global.fetch = mockFetch;
+
+      const { fetchJSearchRawJobs } = await import('../jsearch');
+      await fetchJSearchRawJobs({ query: 'Tech PM' });
+
+      const [calledUrl, calledInit] = mockFetch.mock.calls[0];
+      const url = new URL(calledUrl);
+      expect(url.origin + url.pathname).toBe('https://custom-jsearch.p.rapidapi.com/v5/search');
+      expect(calledInit.headers['x-rapidapi-host']).toBe('custom-jsearch.p.rapidapi.com');
+    });
+
+    it('throws descriptive error on 404 or non-200 responses', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: async () => JSON.stringify({ message: "Endpoint '/search' does not exist" }),
+      });
+      global.fetch = mockFetch;
+
+      const { fetchJSearchRawJobs } = await import('../jsearch');
+      await expect(
+        fetchJSearchRawJobs({ query: 'Tech PM' })
+      ).rejects.toThrow("RapidAPI JSearch error (HTTP 404): {\"message\":\"Endpoint '/search' does not exist\"}");
     });
   });
 });

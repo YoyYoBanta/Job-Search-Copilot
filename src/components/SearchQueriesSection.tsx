@@ -5,6 +5,7 @@ import {
   addSearchQueryAction,
   toggleSearchQueryAction,
   deleteSearchQueryAction,
+  runJSearchNowAction,
   SearchQueryRecord,
 } from '@/app/companies/actions';
 
@@ -20,6 +21,26 @@ export function SearchQueriesSection({ initialQueries }: SearchQueriesSectionPro
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isRunningJSearch, setIsRunningJSearch] = useState(false);
+
+  const handleRunJSearchNow = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsRunningJSearch(true);
+
+    try {
+      const result = await runJSearchNowAction();
+      if (result.success) {
+        setSuccessMessage(result.message || 'JSearch ran successfully!');
+      } else {
+        setErrorMessage(result.error || 'Failed to run JSearch.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unexpected error running JSearch.');
+    } finally {
+      setIsRunningJSearch(false);
+    }
+  };
 
   const handleAddQuery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +97,7 @@ export function SearchQueriesSection({ initialQueries }: SearchQueriesSectionPro
 
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h2 className="card-title" style={{ fontSize: '1.25rem' }}>
             🔍 JSearch Automated Queries
@@ -85,7 +106,19 @@ export function SearchQueriesSection({ initialQueries }: SearchQueriesSectionPro
             Automated Google Jobs / RapidAPI queries executed daily at 6 AM IST (max 3 queries/day).
           </p>
         </div>
-        <span className="badge badge-blue">RapidAPI JSearch</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleRunJSearchNow}
+            disabled={isRunningJSearch || isPending}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+            title="Run enabled JSearch queries immediately for your account"
+          >
+            {isRunningJSearch ? 'Running JSearch...' : '⚡ Run JSearch now'}
+          </button>
+          <span className="badge badge-blue">RapidAPI JSearch</span>
+        </div>
       </div>
 
       {errorMessage && (

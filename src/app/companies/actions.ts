@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { BoardType, CompanyRecord, IngestionMetrics } from '@/lib/ats/types';
 import { ingestJobsForCompany } from '@/lib/ats/fetcher';
+import { isRapidApiMonthlyCapReached } from '@/lib/cron/budget';
+import { ingestJobsForSearchQuery, JSearchIngestionMetrics } from '@/lib/sources/jsearch';
 
 export interface CompanyActionState {
   error?: string;
@@ -238,5 +240,152 @@ export async function deleteSearchQueryAction(formData: FormData) {
     revalidatePath('/companies');
   } catch (err) {
     console.error('Error deleting search query:', err);
+  }
+}
+
+export interface RunJSearchResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  details?: {
+    totalFetched: number;
+    passedFilter: number;
+    prefiltered: number;
+    newInserted: number;
+    duplicatesCount: number;
+    successfulCalls: number;
+    errors: string[];
+  };
+}
+
+export async function runJSearchNowAction(): Promise<RunJSearchResult> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Check monthly cap before starting
+    const initialCapCheck = await isRapidApiMonthlyCapReached(supabase);
+    if (initialCapCheck.reached) {
+      return {
+        success: false,
+        error: `RapidAPI monthly cap reached (${initialCapCheck.usage}/${initialCapCheck.cap}). JSearch stopped.`,
+      };
+    }
+
+    const { data: searchQueries, error: qErr } = await supabase
+      .from('search_queries')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('enabled', true)
+      .order('created_at', { ascending: true });
+
+    if (qErr) {
+      return { success: false, error: `Failed to load search queries: ${qErr.message}` };
+    }
+
+    if (!searchQueries || searchQueries.length === 0) {
+      return {
+        success: false,
+        error: 'No enabled search queries found. Please add or enable at least one search query first.',
+      };
+    }
+
+    let totalFetched = 0;
+    let passedFilter = 0;
+    let prefiltered = 0;
+    let newInserted = 0;
+    let duplicatesCount = 0;
+    let successfulCalls = 0;
+    const errors: string[] = [];
+
+    const startedAtIso = new Date().toISOString();
+
+    for (const queryRow of searchQueries) {
+      // Re-check monthly cap before each call
+      const capCheck = await isRapidApiMonthlyCapReached(supabase);
+      if (capCheck.reached) {
+        errors.push(`Monthly cap reached (${capCheck.usage}/${capCheck.cap}). Stopped remaining queries.`);
+        break;
+      }
+
+      const metrics = await ingestJobsForSearchQuery(
+        {
+          query: queryRow.query,
+          country: queryRow.country,
+          date_posted: queryRow.date_posted,
+        },
+        user.id,
+        supabase
+      );
+
+      if (metrics.error) {
+        errors.push(`[${queryRow.query}] ${metrics.error}`);
+      } else {
+        successfulCalls++;
+        totalFetched += metrics.totalFetched;
+        passedFilter += metrics.passedFilter;
+        prefiltered += metrics.prefiltered;
+        newInserted += metrics.newInserted;
+        duplicatesCount += metrics.duplicatesCount;
+      }
+    }
+
+    const endedAtIso = new Date().toISOString();
+
+    // Log run to cron_runs only if successful calls occurred
+    if (successfulCalls > 0) {
+      await supabase.from('cron_runs').insert({
+        user_id: user.id,
+        started_at: startedAtIso,
+        ended_at: endedAtIso,
+        status: errors.length > 0 ? 'partial' : 'success',
+        stopped_reason: 'done',
+        fetched: totalFetched,
+        matched: passedFilter,
+        prefiltered: prefiltered,
+        search_calls: successfulCalls,
+        inserted: newInserted,
+        scored: 0,
+        errors,
+      });
+    }
+
+    revalidatePath('/companies');
+    revalidatePath('/jobs');
+
+    if (successfulCalls === 0 && errors.length > 0) {
+      return {
+        success: false,
+        error: errors.join(' | '),
+        details: {
+          totalFetched,
+          passedFilter,
+          prefiltered,
+          newInserted,
+          duplicatesCount,
+          successfulCalls,
+          errors,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      message: `JSearch finished: ${newInserted} new jobs added (${passedFilter} matched filter, ${prefiltered} prefiltered, ${totalFetched} total fetched across ${successfulCalls} queries).`,
+      details: {
+        totalFetched,
+        passedFilter,
+        prefiltered,
+        newInserted,
+        duplicatesCount,
+        successfulCalls,
+        errors,
+      },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Unexpected error running JSearch.',
+    };
   }
 }

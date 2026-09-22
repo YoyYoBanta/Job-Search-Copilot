@@ -238,7 +238,6 @@ export async function executeCronFetchAndScore(
             }
 
             try {
-              uMetrics.searchCallsCount++;
               const jsearchMetrics = await ingestJobsForSearchQuery(
                 {
                   query: queryRow.query,
@@ -249,13 +248,14 @@ export async function executeCronFetchAndScore(
                 supabase
               );
 
-              uMetrics.totalFetched += jsearchMetrics.totalFetched || 0;
-              uMetrics.totalMatched += jsearchMetrics.passedFilter || 0;
-              uMetrics.totalPrefiltered += jsearchMetrics.prefiltered || 0;
-              uMetrics.totalInserted += jsearchMetrics.newInserted || 0;
-
               if (jsearchMetrics.error) {
                 uMetrics.errors.push(`[Search: "${queryRow.query}"] Ingestion notice: ${jsearchMetrics.error}`);
+              } else {
+                uMetrics.searchCallsCount++;
+                uMetrics.totalFetched += jsearchMetrics.totalFetched || 0;
+                uMetrics.totalMatched += jsearchMetrics.passedFilter || 0;
+                uMetrics.totalPrefiltered += jsearchMetrics.prefiltered || 0;
+                uMetrics.totalInserted += jsearchMetrics.newInserted || 0;
               }
             } catch (queryErr: any) {
               if (queryErr?.status === 429) {

@@ -79,4 +79,32 @@ describe('JSearch Daily Execution Gate (isJSearchEligibleToday)', () => {
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain('already executed once today');
   });
+
+  it('allows execution if previous runs today had search_calls = 0 (failed or broken runs)', async () => {
+    // 12:00 IST (06:30 UTC)
+    const validAfternoon = new Date('2026-09-22T06:30:00.000Z');
+
+    const createMockBuilder = (rows: any[] = []) => {
+      const b: any = {
+        select: vi.fn(() => b),
+        eq: vi.fn(() => b),
+        gte: vi.fn(() => b),
+        gt: vi.fn((field, val) => {
+          const filtered = rows.filter((r) => r[field] > val);
+          return {
+            limit: vi.fn(async () => ({ data: filtered, error: null })),
+            then: (resolve: any) => resolve({ data: filtered, error: null }),
+          };
+        }),
+      };
+      return b;
+    };
+
+    const mockSupabase: any = {
+      from: vi.fn(() => createMockBuilder([{ id: 'broken-run-today', search_calls: 0 }])),
+    };
+
+    const result = await isJSearchEligibleToday(mockSupabase, OWNER_UID, validAfternoon);
+    expect(result.eligible).toBe(true);
+  });
 });

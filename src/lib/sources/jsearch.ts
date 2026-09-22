@@ -116,18 +116,21 @@ export async function fetchJSearchRawJobs(options: {
     throw new Error('Missing RAPIDAPI_KEY environment variable. JSearch requires a valid RapidAPI Key.');
   }
 
-  const query = encodeURIComponent(options.query.trim());
-  const country = encodeURIComponent(options.country || 'in');
-  const datePosted = encodeURIComponent(options.datePosted || 'week');
-  const numPages = options.numPages || 1;
+  const rawEndpoint = process.env.RAPIDAPI_JSEARCH_URL || 'https://jsearch.p.rapidapi.com/search';
+  const urlObj = new URL(rawEndpoint.trim());
 
-  const url = `https://jsearch.p.rapidapi.com/search?query=${query}&country=${country}&date_posted=${datePosted}&num_pages=${numPages}`;
+  urlObj.searchParams.set('query', options.query.trim());
+  urlObj.searchParams.set('country', options.country || 'in');
+  urlObj.searchParams.set('date_posted', options.datePosted || 'week');
+  urlObj.searchParams.set('num_pages', String(options.numPages || 1));
 
-  const response = await fetch(url, {
+  const hostHeader = process.env.RAPIDAPI_HOST || urlObj.host || 'jsearch.p.rapidapi.com';
+
+  const response = await fetch(urlObj.toString(), {
     method: 'GET',
     headers: {
-      'x-rapidapi-key': apiKey,
-      'x-rapidapi-host': 'jsearch.p.rapidapi.com',
+      'x-rapidapi-key': apiKey.trim(),
+      'x-rapidapi-host': hostHeader,
     },
   });
 
@@ -139,7 +142,9 @@ export async function fetchJSearchRawJobs(options: {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`RapidAPI JSearch error (HTTP ${response.status}): ${errorText}`);
+    const error: any = new Error(`RapidAPI JSearch error (HTTP ${response.status}): ${errorText}`);
+    error.status = response.status;
+    throw error;
   }
 
   const json = await response.json();
