@@ -29,8 +29,17 @@ export async function pasteJobAction(
       return { error: 'All fields (Title, Company, Location, Job URL, Description) are required.' };
     }
 
-    // Evaluate filter rules
-    const filterResult = evaluateJobFilter(title, location);
+    const supabase = await createClient();
+
+    // Load custom user_filters if configured
+    const { data: userFilterRow } = await supabase
+      .from('user_filters')
+      .select('include_titles, exclude_titles, allowed_locations, allow_remote')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    // Evaluate filter rules with user's settings
+    const filterResult = evaluateJobFilter(title, location, userFilterRow || undefined);
     if (!filterResult.passed) {
       return {
         error: `Job does not meet target criteria: ${filterResult.reason || 'Title or location mismatch'}. Only Product roles in India / eligible Remote are stored.`,
@@ -38,7 +47,6 @@ export async function pasteJobAction(
     }
 
     const cleanDescription = sanitizeHtml(rawDescription);
-    const supabase = await createClient();
 
     // Check for existing duplicate job URL (including dismissed jobs)
     const { data: existing } = await supabase
@@ -177,9 +185,15 @@ export async function restoreJobAction(jobIdOrFormData: string | FormData): Prom
 
     let filterWarning: string | undefined;
     if (job) {
-      const filterResult = evaluateJobFilter(job.title, job.location);
+      const { data: userFilterRow } = await supabase
+        .from('user_filters')
+        .select('include_titles, exclude_titles, allowed_locations, allow_remote')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const filterResult = evaluateJobFilter(job.title, job.location, userFilterRow || undefined);
       if (!filterResult.passed) {
-        filterWarning = `Location "${job.location}" is outside target India/Remote criteria, but was restored as requested.`;
+        filterWarning = `Location "${job.location}" is outside target criteria, but was restored as requested.`;
       }
     }
 

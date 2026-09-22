@@ -26,19 +26,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. Validate Required Server Configuration
+  // 2. Validate Allowed Users or Owner Configuration
   const ownerUserId = process.env.OWNER_USER_ID;
-  if (!ownerUserId || !ownerUserId.trim()) {
-    console.error('[Cron API] Missing OWNER_USER_ID environment variable.');
+  const { getAllowedEmails } = await import('@/lib/auth');
+  const allowedEmails = getAllowedEmails();
+
+  if (!ownerUserId?.trim() && allowedEmails.length === 0) {
+    console.error('[Cron API] Missing OWNER_USER_ID or ALLOWED_EMAILS configuration.');
     return NextResponse.json(
-      { error: 'Server misconfiguration: OWNER_USER_ID environment variable is missing.' },
+      { error: 'Server misconfiguration: OWNER_USER_ID or ALLOWED_EMAILS environment variable is missing.' },
       { status: 500 }
     );
   }
 
   try {
     const supabase = createServiceRoleClient();
-    const result = await executeCronFetchAndScore(supabase, ownerUserId.trim(), startTimeMs);
+    const result = await executeCronFetchAndScore(supabase, ownerUserId?.trim(), startTimeMs);
 
     return NextResponse.json({
       success: true,

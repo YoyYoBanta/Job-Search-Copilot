@@ -5,6 +5,7 @@ import { saveProfileAction, type ProfileActionState } from '@/app/profile/action
 import { LocalTime } from '@/components/LocalTime';
 
 interface ResumeEditorProps {
+  initialDisplayName?: string | null;
   initialResumeText: string;
   initialTotalYears: number;
   initialPmYears: number;
@@ -13,12 +14,14 @@ interface ResumeEditorProps {
 }
 
 export function ResumeEditor({
+  initialDisplayName,
   initialResumeText,
   initialTotalYears,
   initialPmYears,
   initialTargetRoles,
   initialUpdatedAt,
 }: ResumeEditorProps) {
+  const [displayName, setDisplayName] = useState(initialDisplayName || '');
   const [resumeText, setResumeText] = useState(initialResumeText);
   const [totalYears, setTotalYears] = useState(initialTotalYears.toString());
   const [pmYears, setPmYears] = useState(initialPmYears.toString());
@@ -80,6 +83,25 @@ export function ResumeEditor({
       <form action={formAction}>
         {/* Experience & Target Roles Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.25rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+          <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+            <label className="label" htmlFor="display_name">
+              Display Name / Preferred Name
+            </label>
+            <input
+              id="display_name"
+              name="display_name"
+              type="text"
+              className="input"
+              placeholder="e.g. Amber"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              disabled={isPending}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Used to personalize your dashboard greetings and cover note sign-offs.
+            </span>
+          </div>
+
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="label" htmlFor="total_years_experience">
               Total Professional Experience (Years)

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { isEmailAllowed, getAllowedEmails } from '@/lib/auth';
 
 export interface AuthActionState {
   error?: string;
@@ -14,20 +15,20 @@ export async function signInAction(
 ): Promise<AuthActionState> {
   const email = (formData.get('email') as string || '').trim().toLowerCase();
   const password = formData.get('password') as string;
-  const allowedEmail = (process.env.ALLOWED_EMAIL || '').trim().toLowerCase();
+  const allowedEmails = getAllowedEmails();
 
   if (!email || !password) {
     return { error: 'Please enter both email and password.' };
   }
 
-  if (!allowedEmail) {
+  if (allowedEmails.length === 0) {
     return {
-      error: 'Server configuration error: ALLOWED_EMAIL environment variable is not set.',
+      error: 'Server configuration error: ALLOWED_EMAILS environment variable is not set.',
     };
   }
 
-  // Early check against ALLOWED_EMAIL
-  if (email !== allowedEmail) {
+  // Early check against allowed emails whitelist
+  if (!isEmailAllowed(email)) {
     return {
       error: 'Not authorised. This email address is not permitted to access this application.',
     };
@@ -45,7 +46,7 @@ export async function signInAction(
   }
 
   const authenticatedEmail = (data.user?.email || '').trim().toLowerCase();
-  if (!allowedEmail || authenticatedEmail !== allowedEmail) {
+  if (!isEmailAllowed(authenticatedEmail)) {
     await supabase.auth.signOut();
     redirect('/unauthorized');
   }

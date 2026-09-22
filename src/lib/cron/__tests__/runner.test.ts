@@ -117,6 +117,11 @@ describe('Cron Runner Safety & Execution Logic', () => {
           `Insert into table '${op.table}' must explicitly include user_id = OWNER_USER_ID`
         ).toBe(OWNER_UID);
       } else {
+        // Global cross-user monthly usage aggregation is un-scoped by design (Requirement 2)
+        if (op.table === 'cron_runs' && op.operation === 'select' && op.eqFilters.length === 0) {
+          continue;
+        }
+
         const userIdFilter = op.eqFilters.find((f) => f.column === 'user_id');
         expect(
           userIdFilter,
@@ -294,7 +299,22 @@ describe('Cron Runner Safety & Execution Logic', () => {
             return builder;
           },
           select: () => builder,
-          maybeSingle: async () => ({ data: { id: 'fatal-run-id' }, error: null }),
+          eq: () => builder,
+          maybeSingle: async () => {
+            if (table === 'profiles') {
+              return {
+                data: { user_id: OWNER_UID, resume_text: 'Test resume' },
+                error: null,
+              };
+            }
+            if (table === 'user_filters') {
+              return { data: { user_id: OWNER_UID }, error: null };
+            }
+            if (table === 'cron_runs') {
+              return { data: { id: 'fatal-run-id' }, error: null };
+            }
+            return { data: null, error: null };
+          },
         };
         return builder;
       }),

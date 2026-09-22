@@ -145,7 +145,7 @@ export function SearchQueriesSection({ initialQueries }: SearchQueriesSectionPro
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {queries.length === 0 ? (
           <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            No automated search queries configured. Add queries like &quot;APM Bengaluru&quot; or &quot;Product Manager remote India&quot;.
+            No automated search queries configured. Add your search queries like &quot;APM Bengaluru&quot; or &quot;Product Manager remote India&quot;.
           </div>
         ) : (
           queries.map((q) => (

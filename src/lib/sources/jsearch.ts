@@ -171,6 +171,13 @@ export async function ingestJobsForSearchQuery(
   };
 
   try {
+    // Load custom user_filters if configured
+    const { data: userFilterRow } = await supabase
+      .from('user_filters')
+      .select('include_titles, exclude_titles, allowed_locations, allow_remote')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     const rawJobs = await fetchJSearchRawJobs({
       query: queryConfig.query,
       country: queryConfig.country || 'in',
@@ -188,7 +195,7 @@ export async function ingestJobsForSearchQuery(
         country: raw.job_country,
         isRemote: raw.job_is_remote,
       });
-      const filterResult = evaluateJobFilter(raw.job_title, location);
+      const filterResult = evaluateJobFilter(raw.job_title, location, userFilterRow || undefined);
       return {
         raw,
         location,

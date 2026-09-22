@@ -35,18 +35,20 @@ describe('JSearch Daily Execution Gate (isJSearchEligibleToday)', () => {
     // 07:00 IST (01:30 UTC)
     const validMorning = new Date('2026-09-22T01:30:00.000Z');
 
+    const createMockBuilder = (rows: any[] = []) => {
+      const b: any = {
+        select: vi.fn(() => b),
+        eq: vi.fn(() => b),
+        gte: vi.fn(() => b),
+        gt: vi.fn(() => b),
+        limit: vi.fn(async () => ({ data: rows, error: null })),
+        then: (resolve: any) => resolve({ data: rows, error: null }),
+      };
+      return b;
+    };
+
     const mockSupabase: any = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            gte: vi.fn(() => ({
-              gt: vi.fn(() => ({
-                limit: vi.fn(async () => ({ data: [], error: null })),
-              })),
-            })),
-          })),
-        })),
-      })),
+      from: vi.fn(() => createMockBuilder([])),
     };
 
     const result = await isJSearchEligibleToday(mockSupabase, OWNER_UID, validMorning);
@@ -57,21 +59,20 @@ describe('JSearch Daily Execution Gate (isJSearchEligibleToday)', () => {
     // 12:00 IST (06:30 UTC)
     const validAfternoon = new Date('2026-09-22T06:30:00.000Z');
 
+    const createMockBuilder = (rows: any[] = []) => {
+      const b: any = {
+        select: vi.fn(() => b),
+        eq: vi.fn(() => b),
+        gte: vi.fn(() => b),
+        gt: vi.fn(() => b),
+        limit: vi.fn(async () => ({ data: rows, error: null })),
+        then: (resolve: any) => resolve({ data: rows, error: null }),
+      };
+      return b;
+    };
+
     const mockSupabase: any = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            gte: vi.fn(() => ({
-              gt: vi.fn(() => ({
-                limit: vi.fn(async () => ({
-                  data: [{ id: 'run-earlier-today', search_calls: 3 }],
-                  error: null,
-                })),
-              })),
-            })),
-          })),
-        })),
-      })),
+      from: vi.fn(() => createMockBuilder([{ id: 'run-earlier-today', search_calls: 3 }])),
     };
 
     const result = await isJSearchEligibleToday(mockSupabase, OWNER_UID, validAfternoon);

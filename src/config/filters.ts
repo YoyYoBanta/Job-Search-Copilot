@@ -7,7 +7,14 @@
  * - Location must be in approved India cities, India, or eligible Remote.
  */
 
-export const TITLE_INCLUSIONS = [
+export interface UserFiltersConfig {
+  include_titles?: string[];
+  exclude_titles?: string[];
+  allowed_locations?: string[];
+  allow_remote?: boolean;
+}
+
+export const DEFAULT_INCLUDE_TITLES = [
   'Product Manager',
   'APM',
   'Associate Product',
@@ -15,7 +22,7 @@ export const TITLE_INCLUSIONS = [
   'Product Analyst',
 ] as const;
 
-export const TITLE_EXCLUSIONS = [
+export const DEFAULT_EXCLUDE_TITLES = [
   'Director',
   'Head of',
   'VP',
@@ -24,7 +31,7 @@ export const TITLE_EXCLUSIONS = [
   'Staff',
 ] as const;
 
-export const APPROVED_INDIA_LOCATIONS = [
+export const DEFAULT_ALLOWED_LOCATIONS = [
   'India',
   'Bangalore',
   'Bengaluru',
@@ -39,6 +46,13 @@ export const APPROVED_INDIA_LOCATIONS = [
   'Chennai',
 ] as const;
 
+export const DEFAULT_ALLOW_REMOTE = true;
+
+// Aliases for backwards compatibility
+export const TITLE_INCLUSIONS = DEFAULT_INCLUDE_TITLES;
+export const TITLE_EXCLUSIONS = DEFAULT_EXCLUDE_TITLES;
+export const APPROVED_INDIA_LOCATIONS = DEFAULT_ALLOWED_LOCATIONS;
+
 function escapeRegex(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -47,7 +61,8 @@ function escapeRegex(string: string): string {
  * Checks if text contains any of the search phrases matching whole words.
  */
 function containsWholePhrase(text: string, phrase: string, caseSensitive: boolean = false): boolean {
-  const escaped = escapeRegex(phrase).replace(/\s+/g, '\\s+');
+  if (!phrase || !phrase.trim()) return false;
+  const escaped = escapeRegex(phrase.trim()).replace(/\s+/g, '\\s+');
   const regex = new RegExp(`\\b${escaped}\\b`, caseSensitive ? '' : 'i');
   return regex.test(text);
 }
@@ -63,13 +78,19 @@ export interface FilterResult {
 /**
  * Evaluates a job's title against inclusion and exclusion rules.
  */
-export function evaluateTitle(title: string): { matched: boolean; reason?: string } {
+export function evaluateTitle(
+  title: string,
+  config?: UserFiltersConfig
+): { matched: boolean; reason?: string } {
   if (!title || !title.trim()) {
     return { matched: false, reason: 'Empty title' };
   }
 
+  const exclusions = config?.exclude_titles ?? DEFAULT_EXCLUDE_TITLES;
+  const inclusions = config?.include_titles ?? DEFAULT_INCLUDE_TITLES;
+
   // 1. Check title exclusions first (Director, VP, Staff, etc.)
-  for (const exclusion of TITLE_EXCLUSIONS) {
+  for (const exclusion of exclusions) {
     if (containsWholePhrase(title, exclusion, false)) {
       return {
         matched: false,
@@ -79,7 +100,7 @@ export function evaluateTitle(title: string): { matched: boolean; reason?: strin
   }
 
   // 2. Check title inclusions (Product Manager, APM, etc.)
-  for (const inclusion of TITLE_INCLUSIONS) {
+  for (const inclusion of inclusions) {
     if (containsWholePhrase(title, inclusion, false)) {
       return { matched: true };
     }
@@ -92,9 +113,12 @@ export function evaluateTitle(title: string): { matched: boolean; reason?: strin
 }
 
 /**
- * Evaluates a job's location against India approved locations and remote eligibility rules.
+ * Evaluates a job's location against approved locations and remote eligibility rules.
  */
-export function evaluateLocation(location: string): {
+export function evaluateLocation(
+  location: string,
+  config?: UserFiltersConfig
+): {
   matched: boolean;
   needsEligibilityCheck: boolean;
   reason?: string;
@@ -108,14 +132,16 @@ export function evaluateLocation(location: string): {
   }
 
   const loc = location.trim();
+  const allowedLocations = config?.allowed_locations ?? DEFAULT_ALLOWED_LOCATIONS;
+  const allowRemote = config?.allow_remote ?? DEFAULT_ALLOW_REMOTE;
 
-  // 1. Check explicit India approved locations or standalone uppercase IN country code
-  const isApprovedIndiaCity = APPROVED_INDIA_LOCATIONS.some((city) =>
+  // 1. Check explicit approved locations or standalone uppercase IN country code
+  const isApprovedCity = allowedLocations.some((city) =>
     containsWholePhrase(loc, city, false)
   );
   const isUppercaseIN = /\bIN\b/.test(loc);
 
-  if (isApprovedIndiaCity || isUppercaseIN) {
+  if (isApprovedCity || isUppercaseIN) {
     return {
       matched: true,
       needsEligibilityCheck: false,
@@ -129,7 +155,15 @@ export function evaluateLocation(location: string): {
     /\banywhere\b/i.test(loc);
 
   if (isRemote) {
-    // Check if the remote location names specific cities/countries/regions outside India
+    if (!allowRemote) {
+      return {
+        matched: false,
+        needsEligibilityCheck: false,
+        reason: 'Remote roles are disabled in user filters',
+      };
+    }
+
+    // Check if the remote location names specific cities/countries/regions outside approved locations
     // Strip generic global/remote descriptor tokens and punctuation
     const remainder = loc
       .replace(
@@ -139,7 +173,7 @@ export function evaluateLocation(location: string): {
       .replace(/[,\-\/\(\)\[\]&|•\s]/g, '')
       .trim();
 
-    // If there is leftover text naming specific foreign cities/countries (and no India location),
+    // If there is leftover text naming specific foreign cities/countries (and no approved location),
     // treat as region-restricted remote and EXCLUDE (Bug 2 fix).
     if (remainder.length > 0) {
       return {
@@ -159,16 +193,20 @@ export function evaluateLocation(location: string): {
   return {
     matched: false,
     needsEligibilityCheck: false,
-    reason: 'Location does not match India cities, approved remote, or IN token',
+    reason: 'Location does not match approved locations, approved remote, or IN token',
   };
 }
 
 /**
  * Main evaluation function combining title and location filtering.
  */
-export function evaluateJobFilter(title: string, location: string): FilterResult {
-  const titleResult = evaluateTitle(title);
-  const locationResult = evaluateLocation(location);
+export function evaluateJobFilter(
+  title: string,
+  location: string,
+  config?: UserFiltersConfig
+): FilterResult {
+  const titleResult = evaluateTitle(title, config);
+  const locationResult = evaluateLocation(location, config);
 
   const passed = titleResult.matched && locationResult.matched;
 

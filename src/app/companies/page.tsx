@@ -5,11 +5,16 @@ import { SearchQueriesSection } from '@/components/SearchQueriesSection';
 import { CompanyRecord } from '@/lib/ats/types';
 import { SearchQueryRecord } from './actions';
 
+import { ensureUserOnboarded } from '@/lib/onboarding';
+
 export const dynamic = 'force-dynamic';
 
 export default async function CompaniesPage() {
   const user = await requireAuth();
   const supabase = await createClient();
+
+  // Ensure user is onboarded
+  await ensureUserOnboarded(supabase, user.id, user.email);
 
   const { data: companies } = await supabase
     .from('companies')

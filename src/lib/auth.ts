@@ -9,7 +9,28 @@ export interface AuthValidationResult {
 }
 
 /**
- * Validates the current session and checks against ALLOWED_EMAIL.
+ * Returns the list of permitted user emails from ALLOWED_EMAILS or fallback ALLOWED_EMAIL.
+ */
+export function getAllowedEmails(): string[] {
+  const raw = process.env.ALLOWED_EMAILS || process.env.ALLOWED_EMAIL || '';
+  return raw
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0);
+}
+
+/**
+ * Checks if a given email is in the allowed whitelist.
+ */
+export function isEmailAllowed(email?: string | null): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const allowed = getAllowedEmails();
+  if (allowed.length === 0) return false;
+  return allowed.includes(email.trim().toLowerCase());
+}
+
+/**
+ * Validates the current session and checks against the ALLOWED_EMAILS whitelist.
  */
 export async function validateUserSession(): Promise<AuthValidationResult> {
   const supabase = await createClient();
@@ -27,16 +48,13 @@ export async function validateUserSession(): Promise<AuthValidationResult> {
     };
   }
 
-  const allowedEmail = (process.env.ALLOWED_EMAIL || '').trim().toLowerCase();
-  const userEmail = (user.email || '').trim().toLowerCase();
-
-  const isAuthorized = Boolean(allowedEmail && userEmail === allowedEmail);
+  const isAuthorized = isEmailAllowed(user.email);
 
   return {
     user,
     isAuthenticated: true,
     isAuthorized,
-    error: isAuthorized ? undefined : 'Email not in whitelist',
+    error: isAuthorized ? undefined : 'Email not in allowed whitelist',
   };
 }
 

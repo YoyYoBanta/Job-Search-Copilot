@@ -8,7 +8,11 @@ export async function middleware(request: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const allowedEmail = (process.env.ALLOWED_EMAIL || '').trim().toLowerCase();
+  const rawAllowedEmails = process.env.ALLOWED_EMAILS || process.env.ALLOWED_EMAIL || '';
+  const allowedEmailsList = rawAllowedEmails
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0);
 
   const path = request.nextUrl.pathname;
   const isPublicRoute =
@@ -62,7 +66,9 @@ export async function middleware(request: NextRequest) {
   // 2. Authenticated user checks
   if (user) {
     const userEmail = (user.email || '').trim().toLowerCase();
-    const isAuthorized = Boolean(allowedEmail && userEmail === allowedEmail);
+    const isAuthorized = Boolean(
+      allowedEmailsList.length > 0 && allowedEmailsList.includes(userEmail)
+    );
 
     if (!isAuthorized) {
       // Sign out unauthorized user in middleware where response cookies can be modified

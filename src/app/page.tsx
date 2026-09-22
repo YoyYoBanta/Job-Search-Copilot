@@ -1,6 +1,8 @@
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { LocalTime } from '@/components/LocalTime';
+import { ensureUserOnboarded } from '@/lib/onboarding';
+import { getRapidApiMonthlyUsage, getRapidApiMonthlyCap } from '@/lib/cron/budget';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -9,9 +11,12 @@ export default async function HomePage() {
   const user = await requireAuth();
   const supabase = await createClient();
 
+  // Ensure user is onboarded
+  await ensureUserOnboarded(supabase, user.id, user.email);
+
   const { data: profile } = await supabase
     .from('profiles')
-    .select('resume_text, updated_at')
+    .select('display_name, resume_text, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -39,7 +44,12 @@ export default async function HomePage() {
     .limit(1)
     .maybeSingle();
 
+  // RapidAPI Monthly Cap & Usage across all users
+  const monthlyUsage = await getRapidApiMonthlyUsage(supabase);
+  const monthlyCap = getRapidApiMonthlyCap();
+
   const hasResume = Boolean(profile?.resume_text?.trim());
+  const greetingName = profile?.display_name?.trim() || user.email?.split('@')[0] || user.email;
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -73,16 +83,48 @@ export default async function HomePage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      {/* Resume Reminder Banner if empty */}
+      {!hasResume && (
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: 'var(--radius-md, 8px)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '1.25rem' }}>📝</span>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--accent-warning, #fbbf24)' }}>
+                Add your resume to enable scoring
+              </div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                Your master resume is required by the AI Matcher to evaluate fit score and tailor applications.
+              </div>
+            </div>
+          </div>
+          <Link href="/profile" className="btn btn-primary" style={{ fontSize: '0.8125rem' }}>
+            Configure Profile →
+          </Link>
+        </div>
+      )}
+
       {/* Welcome Card */}
       <div className="card" style={{ background: 'linear-gradient(135deg, rgba(18, 24, 36, 0.9), rgba(26, 34, 51, 0.9))' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
               <span className="badge badge-emerald">Active</span>
-              <span className="badge badge-amber">Single-User</span>
+              <span className="badge badge-blue">JSearch monthly usage: {monthlyUsage}/{monthlyCap}</span>
             </div>
             <h1 className="card-title" style={{ fontSize: '1.75rem' }}>
-              Welcome back, {user.email}
+              Welcome back, {greetingName}
             </h1>
             <p className="card-desc" style={{ maxWidth: '650px', marginTop: '0.5rem' }}>
               Your personal Job Search Copilot is active. Target companies, automated job feeds, AI fit scoring, tailored outreach, and application pipeline tracking are ready.
@@ -233,7 +275,7 @@ export default async function HomePage() {
             )}
           </p>
           <Link href="/profile" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
-            Manage Resume
+            Manage Resume & Filters
           </Link>
         </div>
 

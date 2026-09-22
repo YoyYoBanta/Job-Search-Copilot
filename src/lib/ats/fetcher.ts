@@ -38,6 +38,15 @@ export async function ingestJobsForCompany(
   };
 
   try {
+    const supabase = customClient || (await createClient());
+
+    // Load custom user_filters if configured
+    const { data: userFilterRow } = await supabase
+      .from('user_filters')
+      .select('include_titles, exclude_titles, allowed_locations, allow_remote')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     // 1. Fetch raw jobs
     const rawJobs = await fetchRawJobsForCompany(company);
     metrics.totalFetched = rawJobs.length;
@@ -49,7 +58,7 @@ export async function ingestJobsForCompany(
     // 2. Filter jobs according to title and location rules
     const filteredJobs = rawJobs
       .map((job) => {
-        const filterResult = evaluateJobFilter(job.title, job.location);
+        const filterResult = evaluateJobFilter(job.title, job.location, userFilterRow || undefined);
         return {
           ...job,
           filterResult,
@@ -62,8 +71,6 @@ export async function ingestJobsForCompany(
     if (filteredJobs.length === 0) {
       return metrics;
     }
-
-    const supabase = customClient || (await createClient());
 
     // 3. Query existing job URLs for this batch only, chunked in batches of 200
     // Note: Does NOT filter by dismissed; dismissed rows are preserved in DB and skipped

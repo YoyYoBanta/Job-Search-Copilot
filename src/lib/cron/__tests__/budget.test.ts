@@ -85,4 +85,48 @@ describe('Cron Scoring Budget & IST Utilities', () => {
       expect(calculateRemainingBudget(30, -5)).toBe(30);
     });
   });
+
+  describe('RapidAPI Monthly Cap & Usage', () => {
+    const originalMonthlyCap = process.env.RAPIDAPI_MONTHLY_CAP;
+
+    afterEach(() => {
+      process.env.RAPIDAPI_MONTHLY_CAP = originalMonthlyCap;
+    });
+
+    it('returns default 190 when RAPIDAPI_MONTHLY_CAP is unset', async () => {
+      const { getRapidApiMonthlyCap } = await import('../budget');
+      delete process.env.RAPIDAPI_MONTHLY_CAP;
+      expect(getRapidApiMonthlyCap()).toBe(190);
+    });
+
+    it('parses custom integer from RAPIDAPI_MONTHLY_CAP', async () => {
+      const { getRapidApiMonthlyCap } = await import('../budget');
+      process.env.RAPIDAPI_MONTHLY_CAP = '250';
+      expect(getRapidApiMonthlyCap()).toBe(250);
+    });
+
+    it('sums search_calls across all users for current calendar month', async () => {
+      const { getRapidApiMonthlyUsage, isRapidApiMonthlyCapReached } = await import('../budget');
+      process.env.RAPIDAPI_MONTHLY_CAP = '190';
+
+      const mockSupabase: any = {
+        from: (table: string) => ({
+          select: () => ({
+            gte: () => ({
+              data: [{ search_calls: 100 }, { search_calls: 95 }],
+              error: null,
+            }),
+          }),
+        }),
+      };
+
+      const usage = await getRapidApiMonthlyUsage(mockSupabase);
+      expect(usage).toBe(195);
+
+      const status = await isRapidApiMonthlyCapReached(mockSupabase);
+      expect(status.reached).toBe(true);
+      expect(status.usage).toBe(195);
+      expect(status.cap).toBe(190);
+    });
+  });
 });
