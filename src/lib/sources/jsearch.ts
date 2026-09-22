@@ -6,22 +6,39 @@ import { evaluateScoringPreFilter } from '@/lib/matcher/prefilter';
 import { isJobDuplicate, ExistingJobDedupeRecord, ApplyOption } from './dedupe';
 
 export interface JSearchRawJob {
-  job_id: string;
-  job_title: string;
-  employer_name: string;
+  job_id?: string;
+  id?: string;
+  job_title?: string;
+  title?: string;
+  employer_name?: string;
+  company_name?: string;
+  employer?: string;
   job_city?: string | null;
+  city?: string | null;
   job_country?: string | null;
+  country?: string | null;
   job_is_remote?: boolean;
+  is_remote?: boolean;
+  work_from_home?: boolean;
   job_apply_link?: string;
+  apply_link?: string;
+  job_url?: string;
   job_apply_is_direct?: boolean;
+  is_direct?: boolean;
   job_description?: string;
+  description?: string;
   job_posted_at_datetime_utc?: string;
+  posted_at?: string;
+  date_posted?: string;
   job_posted_at_timestamp?: number;
+  required_experience_years?: number | null;
+  required_experience_in_months?: number | null;
   job_required_experience?: {
     required_experience_in_months?: number | null;
     no_experience_required?: boolean;
     experience_mentioned?: boolean;
   };
+  seniority_level?: string | null;
   job_highlights?: {
     Qualifications?: string[];
     Responsibilities?: string[];
@@ -29,7 +46,10 @@ export interface JSearchRawJob {
   apply_options?: Array<{
     publisher?: string;
     apply_link?: string;
+    link?: string;
+    url?: string;
     is_direct?: boolean;
+    isDirect?: boolean;
   }>;
 }
 
@@ -75,27 +95,29 @@ export function extractApplyOptions(rawJob: JSearchRawJob): ApplyOption[] {
   const options: ApplyOption[] = [];
   const seenLinks = new Set<string>();
 
-  if (Array.isArray(rawJob.apply_options)) {
-    for (const opt of rawJob.apply_options) {
-      const link = (opt.apply_link || '').trim();
+  const rawOptions = rawJob.apply_options;
+  if (Array.isArray(rawOptions)) {
+    for (const opt of rawOptions) {
+      const link = (opt.apply_link || opt.link || opt.url || '').trim();
       const publisher = (opt.publisher || 'Direct').trim();
       if (link && !seenLinks.has(link)) {
         seenLinks.add(link);
         options.push({
           publisher,
           apply_link: link,
-          is_direct: Boolean(opt.is_direct),
+          is_direct: Boolean(opt.is_direct ?? opt.isDirect),
         });
       }
     }
   }
 
-  // Fallback to job_apply_link if no apply_options present
-  if (options.length === 0 && rawJob.job_apply_link) {
+  // Fallback to direct apply links if no apply_options present
+  const fallbackLink = (rawJob.job_apply_link || rawJob.apply_link || rawJob.job_url || '').trim();
+  if (options.length === 0 && fallbackLink) {
     options.push({
       publisher: 'Publisher Link',
-      apply_link: rawJob.job_apply_link.trim(),
-      is_direct: Boolean(rawJob.job_apply_is_direct),
+      apply_link: fallbackLink,
+      is_direct: Boolean(rawJob.job_apply_is_direct ?? rawJob.is_direct),
     });
   }
 
@@ -103,7 +125,7 @@ export function extractApplyOptions(rawJob: JSearchRawJob): ApplyOption[] {
 }
 
 /**
- * Calls RapidAPI JSearch search endpoint.
+ * Calls RapidAPI JSearch search endpoint (defaults to /search-v2).
  */
 export async function fetchJSearchRawJobs(options: {
   query: string;
@@ -116,13 +138,14 @@ export async function fetchJSearchRawJobs(options: {
     throw new Error('Missing RAPIDAPI_KEY environment variable. JSearch requires a valid RapidAPI Key.');
   }
 
-  const rawEndpoint = process.env.RAPIDAPI_JSEARCH_URL || 'https://jsearch.p.rapidapi.com/search';
+  const rawEndpoint = process.env.RAPIDAPI_JSEARCH_URL || 'https://jsearch.p.rapidapi.com/search-v2';
   const urlObj = new URL(rawEndpoint.trim());
 
   urlObj.searchParams.set('query', options.query.trim());
   urlObj.searchParams.set('country', options.country || 'in');
   urlObj.searchParams.set('date_posted', options.datePosted || 'week');
   urlObj.searchParams.set('num_pages', String(options.numPages || 1));
+  urlObj.searchParams.set('page', '1');
 
   const hostHeader = process.env.RAPIDAPI_HOST || urlObj.host || 'jsearch.p.rapidapi.com';
 
@@ -135,15 +158,20 @@ export async function fetchJSearchRawJobs(options: {
   });
 
   if (response.status === 429) {
+    console.error(`[JSearch API 429 Rate Limit] URL: ${urlObj.toString()}`);
     const error: any = new Error('RapidAPI JSearch rate limit exceeded (HTTP 429).');
     error.status = 429;
+    error.url = urlObj.toString();
     throw error;
   }
 
   if (!response.ok) {
     const errorText = await response.text();
-    const error: any = new Error(`RapidAPI JSearch error (HTTP ${response.status}): ${errorText}`);
+    console.error(`[JSearch API Error] URL: ${urlObj.toString()} | Status: ${response.status} | Response: ${errorText}`);
+    const error: any = new Error(`RapidAPI JSearch error (HTTP ${response.status}) at ${urlObj.pathname}: ${errorText}`);
     error.status = response.status;
+    error.url = urlObj.toString();
+    error.responseBody = errorText;
     throw error;
   }
 
@@ -195,14 +223,23 @@ export async function ingestJobsForSearchQuery(
 
     // 1. Initial Title and Location Filter
     const filterCandidates = rawJobs.map((raw) => {
+      const title = (raw.job_title || raw.title || '').trim();
+      const company = (raw.employer_name || raw.company_name || raw.employer || '').trim();
+      const city = raw.job_city || raw.city || null;
+      const country = raw.job_country || raw.country || null;
+      const isRemote = Boolean(raw.job_is_remote ?? raw.is_remote ?? raw.work_from_home);
+
       const location = formatJSearchLocation({
-        city: raw.job_city,
-        country: raw.job_country,
-        isRemote: raw.job_is_remote,
+        city,
+        country,
+        isRemote,
       });
-      const filterResult = evaluateJobFilter(raw.job_title, location, userFilterRow || undefined);
+
+      const filterResult = evaluateJobFilter(title, location, userFilterRow || undefined);
       return {
         raw,
+        title,
+        company,
         location,
         filterResult,
       };
@@ -215,13 +252,20 @@ export async function ingestJobsForSearchQuery(
     // 2. Pre-filter at ingestion (required_experience >= 6, blocked seniority, > 21 days old)
     const validAfterPreFilter: typeof passedFilterCandidates = [];
     for (const candidate of passedFilterCandidates) {
-      const expMonths = candidate.raw.job_required_experience?.required_experience_in_months;
-      const expYears = typeof expMonths === 'number' ? expMonths / 12 : null;
+      const raw = candidate.raw;
+      let expYears: number | null = null;
+      if (typeof raw.required_experience_years === 'number') {
+        expYears = raw.required_experience_years;
+      } else if (typeof raw.job_required_experience?.required_experience_in_months === 'number') {
+        expYears = raw.job_required_experience.required_experience_in_months / 12;
+      } else if (typeof raw.required_experience_in_months === 'number') {
+        expYears = raw.required_experience_in_months / 12;
+      }
 
       const prefilterResult = evaluateScoringPreFilter({
-        title: candidate.raw.job_title,
-        description: candidate.raw.job_description,
-        postedAt: candidate.raw.job_posted_at_datetime_utc || candidate.raw.job_posted_at_timestamp,
+        title: candidate.title,
+        description: raw.job_description || raw.description || '',
+        postedAt: raw.job_posted_at_datetime_utc || raw.posted_at || raw.date_posted || raw.job_posted_at_timestamp,
         requiredExperienceYears: expYears,
       });
 
@@ -260,16 +304,17 @@ export async function ingestJobsForSearchQuery(
     for (const item of validAfterPreFilter) {
       const raw = item.raw;
       const applyOptions = extractApplyOptions(raw);
-      const mainJobUrl = applyOptions[0]?.apply_link || raw.job_apply_link || '';
+      const mainJobUrl = applyOptions[0]?.apply_link || raw.job_apply_link || raw.apply_link || raw.job_url || '';
 
       if (!mainJobUrl) continue;
 
+      const jobId = raw.job_id || raw.id || mainJobUrl;
       const dedupeResult = isJobDuplicate(
         {
           job_url: mainJobUrl,
-          external_id: raw.job_id,
-          company_name: raw.employer_name,
-          title: raw.job_title,
+          external_id: jobId,
+          company_name: item.company,
+          title: item.title,
         },
         existingJobs
       );
@@ -277,15 +322,15 @@ export async function ingestJobsForSearchQuery(
       if (dedupeResult.isDuplicate) {
         metrics.duplicatesCount++;
       } else {
-        const cleanDescription = sanitizeHtml(raw.job_description || '');
+        const cleanDescription = sanitizeHtml(raw.job_description || raw.description || '');
         jobsToInsert.push({
           user_id: userId,
-          title: raw.job_title.trim(),
-          company_name: raw.employer_name.trim(),
-          location: item.location.trim(),
+          title: item.title,
+          company_name: item.company,
+          location: item.location,
           job_url: mainJobUrl.trim(),
           description: cleanDescription,
-          external_id: raw.job_id,
+          external_id: jobId,
           apply_options: applyOptions,
           source: 'search',
           needs_eligibility_check: item.filterResult.needsEligibilityCheck,

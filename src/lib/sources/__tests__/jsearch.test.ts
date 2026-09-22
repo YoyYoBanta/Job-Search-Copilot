@@ -137,7 +137,7 @@ describe('JSearch Parser & Apply Option Utilities', () => {
 
       const [calledUrl, calledInit] = mockFetch.mock.calls[0];
       const url = new URL(calledUrl);
-      expect(url.origin + url.pathname).toBe('https://jsearch.p.rapidapi.com/search');
+      expect(url.origin + url.pathname).toBe('https://jsearch.p.rapidapi.com/search-v2');
       expect(url.searchParams.get('query')).toBe('Associate Product Manager');
       expect(url.searchParams.get('country')).toBe('in');
       expect(url.searchParams.get('date_posted')).toBe('week');
@@ -147,7 +147,7 @@ describe('JSearch Parser & Apply Option Utilities', () => {
     });
 
     it('supports custom RAPIDAPI_JSEARCH_URL and RAPIDAPI_HOST env variables', async () => {
-      process.env.RAPIDAPI_JSEARCH_URL = 'https://custom-jsearch.p.rapidapi.com/v5/search';
+      process.env.RAPIDAPI_JSEARCH_URL = 'https://custom-jsearch.p.rapidapi.com/custom-search';
       process.env.RAPIDAPI_HOST = 'custom-jsearch.p.rapidapi.com';
 
       const mockFetch = vi.fn().mockResolvedValue({
@@ -162,11 +162,11 @@ describe('JSearch Parser & Apply Option Utilities', () => {
 
       const [calledUrl, calledInit] = mockFetch.mock.calls[0];
       const url = new URL(calledUrl);
-      expect(url.origin + url.pathname).toBe('https://custom-jsearch.p.rapidapi.com/v5/search');
+      expect(url.origin + url.pathname).toBe('https://custom-jsearch.p.rapidapi.com/custom-search');
       expect(calledInit.headers['x-rapidapi-host']).toBe('custom-jsearch.p.rapidapi.com');
     });
 
-    it('throws descriptive error on 404 or non-200 responses', async () => {
+    it('throws descriptive error on 404 or non-200 responses with URL and response body', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 404,
@@ -177,7 +177,42 @@ describe('JSearch Parser & Apply Option Utilities', () => {
       const { fetchJSearchRawJobs } = await import('../jsearch');
       await expect(
         fetchJSearchRawJobs({ query: 'Tech PM' })
-      ).rejects.toThrow("RapidAPI JSearch error (HTTP 404): {\"message\":\"Endpoint '/search' does not exist\"}");
+      ).rejects.toThrow("RapidAPI JSearch error (HTTP 404) at /search-v2: {\"message\":\"Endpoint '/search' does not exist\"}");
+    });
+  });
+
+  describe('extractApplyOptions and v2 field mapping', () => {
+    it('supports alternative field names like title, company_name, link, url', () => {
+      const rawV2Job = {
+        id: 'v2-1',
+        title: 'Product Manager',
+        company_name: 'Stripe',
+        apply_options: [
+          {
+            publisher: 'Stripe Careers',
+            link: 'https://stripe.com/jobs/pm',
+            isDirect: true,
+          },
+          {
+            publisher: 'LinkedIn',
+            url: 'https://linkedin.com/jobs/pm',
+            isDirect: false,
+          },
+        ],
+      };
+
+      const options = extractApplyOptions(rawV2Job as any);
+      expect(options.length).toBe(2);
+      expect(options[0]).toEqual({
+        publisher: 'Stripe Careers',
+        apply_link: 'https://stripe.com/jobs/pm',
+        is_direct: true,
+      });
+      expect(options[1]).toEqual({
+        publisher: 'LinkedIn',
+        apply_link: 'https://linkedin.com/jobs/pm',
+        is_direct: false,
+      });
     });
   });
 });
