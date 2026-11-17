@@ -56,8 +56,13 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 1. Unauthenticated users accessing protected routes -> /login
+  const isApiRoute = path.startsWith('/api/');
+
+  // 1. Unauthenticated users accessing protected routes -> /login (API routes get a JSON 401)
   if (!user && !isPublicRoute) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
@@ -77,6 +82,15 @@ export async function middleware(request: NextRequest) {
       // If already on /unauthorized, return response with cleared cookies directly (no loop)
       if (path === '/unauthorized') {
         return supabaseResponse;
+      }
+
+      // API routes get a JSON 403 (with cleared cookies) instead of a page redirect
+      if (isApiRoute) {
+        const forbidden = NextResponse.json({ error: 'Email not in allowed whitelist' }, { status: 403 });
+        supabaseResponse.cookies.getAll().forEach((cookie) => {
+          forbidden.cookies.set(cookie.name, cookie.value, cookie);
+        });
+        return forbidden;
       }
 
       // Redirect to /unauthorized with cleared cookie headers copied

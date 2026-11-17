@@ -1,6 +1,6 @@
 # Job Search Copilot — Implementation Plan
 
-**Current Status:** Phase 5 Verified & Closed — Ready for Phase 6 / Release
+**Current Status:** Phase 6 code complete (README, security audit, clean production build). Final manual walkthrough on the live Vercel deploy pending.
 
 ---
 
@@ -257,20 +257,27 @@
 
 - **Goal**: Package comprehensive setup documentation, verify Vercel deployment readiness, and perform end-to-end security and secrets isolation audits.
 - **Tasks**:
-  - [ ] Complete `README.md` with step-by-step instructions:
+  - [x] Complete `README.md` with step-by-step instructions:
     - Prerequisites (Node.js, Supabase account, Groq API key).
     - Database setup (running Supabase migrations in order `01` to `04`).
     - Supabase Auth setup (Email+Password provider and disabling signups after owner registration).
     - Environment variables setup (`.env.example`).
     - Local dev commands (`npm run dev`, `npm test`).
     - Vercel deployment guide.
-  - [ ] Security & secrets audit:
+  - [x] Security & secrets audit:
     - Ensure `SUPABASE_SERVICE_ROLE_KEY` and `GROQ_API_KEY` are never bundled into client JS or exposed with `NEXT_PUBLIC_`.
     - Ensure `src/lib/supabase/admin.ts` (if present) has `import 'server-only'`.
     - Ensure all API routes / Server Actions enforce user session + `ALLOWED_EMAIL` verification.
     - Ensure RLS policies are enabled on all Supabase tables.
-  - [ ] Verify production build (`npm run build`) runs cleanly without errors.
-  - [ ] Final end-to-end manual verification walkthrough.
+  - [x] Verify production build (`npm run build`) runs cleanly without errors.
+  - [ ] Final end-to-end manual verification walkthrough (on the live Vercel deploy).
+- **Audit notes (Phase 6)**:
+  - Production bundle (`.next/static`) contains no references to `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `RAPIDAPI_KEY` or `CRON_SECRET`; only `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` are public.
+  - `server-only` imported in serviceRole, groq client, tailor generator, ATS scanner, JSearch source, and now `src/lib/cron/auth.ts`.
+  - Every exported Server Action calls `requireAuth()` (`deleteJobAction` and `saveResumeAction` are aliases of guarded actions); login actions are intentionally public.
+  - API routes now return JSON 401 (not signed in) / 403 (email not allowed) from both middleware and `/api/score/job`, instead of redirecting. `/api/cron/fetch` requires the Bearer `CRON_SECRET` (constant-time compare).
+  - RLS enabled on all 8 tables (profiles, companies, jobs, feedback, applications, cron_runs, search_queries, user_filters).
+  - `npx tsc --noEmit` clean (fixed a stale mock missing `rateLimitInfo` in `multiUserRunner.test.ts`); 180/180 tests pass; `npm run build` succeeds.
 - **Files Likely Touched**:
   - `README.md`
   - `.env.example`
