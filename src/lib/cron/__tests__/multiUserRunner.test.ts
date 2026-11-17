@@ -36,6 +36,7 @@ describe('Multi-User Cron Runner Tests', () => {
           seniority_match: 'fit',
         },
         modelUsed: 'llama-3.3-70b-versatile',
+        rateLimitInfo: {},
       };
     });
 

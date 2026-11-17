@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { validateUserSession } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { buildScoringPrompt } from '@/lib/matcher/prompts';
 import { requestGroqFitScore } from '@/lib/groq/client';
@@ -9,7 +9,13 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth();
+    const { user, isAuthenticated, isAuthorized } = await validateUserSession();
+    if (!isAuthenticated || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    if (!isAuthorized) {
+      return NextResponse.json({ error: 'Email not in allowed whitelist' }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const { jobId } = body;
 
